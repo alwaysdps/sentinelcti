@@ -1,0 +1,6 @@
+# Root requirements for the Vercel Python runtime.
+#
+# Vercel looks for this file at the repository root to build the functions in
+# /api. It defers to backend/requirements.txt so there is one dependency list
+# rather than two that drift apart.
+-r backend/requirements.txt

@@ -1,0 +1,15 @@
+# Lower bounds rather than exact pins: the project targets Python 3.11+ through
+# 3.14, and exact pins would force a source build of pydantic-core on newer
+# interpreters that have no matching wheel yet. Docker pins the interpreter
+# version instead, which is where reproducibility actually matters.
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+pydantic>=2.10.0
+pydantic-settings>=2.7.0
+SQLAlchemy>=2.0.36
+python-multipart>=0.0.20
+
+# PostgreSQL driver, used when DATABASE_URL points at Postgres/Supabase.
+# Harmless with the SQLite default -- SQLAlchemy only imports the driver the
+# URL actually names.
+psycopg[binary]>=3.2

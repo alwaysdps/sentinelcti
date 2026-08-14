@@ -1,0 +1,131 @@
+# SentinelCTI — full stack.
+#
+#   docker compose up --build      → http://localhost:8080
+#
+# The frontend container also reverse-proxies /api and /docs to the backend, so
+# the browser only ever talks to one origin. That is why the backend's port is
+# published only on loopback: it exists for direct API work and debugging, not
+# as the path the application uses.
+
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: sentinelcti-backend
+    restart: unless-stopped
+    # Reads backend/.env if present, which is where the Supabase URL belongs --
+    # a connection string contains a password and must never be committed in
+    # this file.
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      ENVIRONMENT: production
+      DEBUG: "false"
+      # NOTE: DATABASE_URL is deliberately NOT set here.
+      #
+      # Compose precedence is `environment` > `env_file` > Dockerfile `ENV`, so
+      # naming it here would override backend/.env and silently run on SQLite
+      # even with a Supabase URL configured -- the failure would look like an
+      # empty database rather than a misconfiguration.
+      #
+      # The SQLite fallback lives in the Dockerfile's ENV (lowest precedence),
+      # so env_file wins when present and the default applies when it is not.
+      UPLOAD_DIR: /app/var/quarantine
+      # Forwarded to the app when set on the host; blank otherwise, which is
+      # the safe default (headers ignored, socket peer used).
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      CLIENT_IP_HEADER: ${CLIENT_IP_HEADER:-}
+      # nginx serves the app from the same origin, so no cross-origin grant is
+      # needed. Listed explicitly for anyone running the frontend dev server
+      # against this container.
+      CORS_ORIGINS: http://localhost:8080,http://localhost:5173
+      ENABLE_DNS_LOOKUPS: "true"
+      ENABLE_ACTIVE_URL_FETCH: "false"
+      ENABLED_PROVIDERS: local
+    volumes:
+      # Named volume, not a bind mount: the quarantine directory must not be
+      # reachable from the host filesystem by accident.
+      - sentinel-data:/app/var
+    ports:
+      # Loopback only. Remove the 127.0.0.1 prefix at your own risk -- the API
+      # has no authentication.
+      - "127.0.0.1:8000:8000"
+    networks:
+      - sentinel
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: sentinelcti-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    networks:
+      - sentinel
+
+  # --- Cloudflare Tunnel ---------------------------------------------------
+  # Publishes the app through Cloudflare with NO inbound ports open on the
+  # host: cloudflared dials out to Cloudflare and traffic returns down that
+  # connection. Nothing to port-scan, nothing to reach directly, and it works
+  # from a home network or a laptop without a static IP.
+  #
+  # This is what makes Cloudflare's protections actually binding. With a
+  # publicly reachable origin, anyone who finds the IP -- Shodan, certificate
+  # transparency, a stale DNS record -- connects straight past the WAF, the
+  # rate limiting and Access.
+  #
+  # Setup:
+  #   1. Zero Trust dashboard -> Networks -> Tunnels -> Create a tunnel
+  #   2. Copy the token into backend/.env as TUNNEL_TOKEN=...
+  #   3. Point the tunnel's public hostname at  http://frontend:80
+  #   4. docker compose --profile tunnel up -d
+  #
+  # Then set these in backend/.env so the app can identify real clients:
+  #   TRUSTED_PROXIES=cloudflare
+  #   CLIENT_IP_HEADER=cf-connecting-ip
+  #
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: sentinelcti-tunnel
+  #   restart: unless-stopped
+  #   profiles: ["tunnel"]
+  #   command: tunnel --no-autoupdate run
+  #   environment:
+  #     TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in backend/.env}
+  #   depends_on:
+  #     - frontend
+  #   networks:
+  #     - sentinel
+
+  # --- Local PostgreSQL (alternative to Supabase) --------------------------
+  # Supabase needs no service here -- it is a hosted endpoint, so only
+  # DATABASE_URL changes. Uncomment this only to run Postgres locally instead.
+  #
+  # db:
+  #   image: postgres:16-alpine
+  #   container_name: sentinelcti-db
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: sentinel
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+  #     POSTGRES_DB: sentinelcti
+  #   volumes:
+  #     - sentinel-db:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinelcti"]
+  #     interval: 10s
+  #     retries: 5
+  #   networks:
+  #     - sentinel
+
+volumes:
+  sentinel-data:
+  # sentinel-db:
+
+networks:
+  sentinel:
+    driver: bridge
