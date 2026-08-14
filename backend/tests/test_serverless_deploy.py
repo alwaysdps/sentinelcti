@@ -18,6 +18,7 @@ limiting at the edge.
 from __future__ import annotations
 
 import importlib.util
+import re
 from pathlib import Path
 
 import pytest
@@ -146,12 +147,58 @@ class TestReadOnlyFilesystem:
             assert client.get("/api/analyses").status_code == 200
 
 
-class TestDependencyManifest:
-    def test_root_requirements_defers_to_backend(self):
-        """One dependency list, not two that drift apart."""
-        text = (REPO_ROOT / "requirements.txt").read_text(encoding="utf-8")
-        assert "-r backend/requirements.txt" in text
+def _packages(path: Path) -> set[str]:
+    """Package names declared in a requirements file, ignoring version specs."""
+    names: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        entry = line.split("#", 1)[0].strip()
+        if not entry or entry.startswith("-"):
+            continue
+        # "psycopg[binary]>=3.2" -> "psycopg"
+        names.add(re.split(r"[\[<>=!~;]", entry, maxsplit=1)[0].strip().lower())
+    return names
 
-    def test_postgres_driver_is_present(self):
-        text = (REPO_ROOT / "backend" / "requirements.txt").read_text(encoding="utf-8")
-        assert "psycopg" in text
+
+class TestDependencyManifest:
+    """The root manifest duplicates the backend one because Vercel's parser
+    rejects `-r` includes:
+
+        Error: could not parse requirements.txt
+
+    Duplication invites drift, so it is asserted away here rather than left to
+    be discovered by a failing production deploy."""
+
+    ROOT = REPO_ROOT / "requirements.txt"
+    BACKEND = REPO_ROOT / "backend" / "requirements.txt"
+
+    # Supplied by the platform; shipping it would only add cold-start weight.
+    SERVERLESS_OMITTED = {"uvicorn"}
+
+    def test_root_manifest_uses_no_include_directives(self):
+        """The exact construct that failed the first deploy."""
+        for line in self.ROOT.read_text(encoding="utf-8").splitlines():
+            entry = line.split("#", 1)[0].strip()
+            assert not entry.startswith("-r "), f"Vercel cannot parse: {entry!r}"
+            assert not entry.startswith("--requirement"), f"Vercel cannot parse: {entry!r}"
+
+    def test_manifests_declare_the_same_packages(self):
+        root = _packages(self.ROOT)
+        backend = _packages(self.BACKEND) - self.SERVERLESS_OMITTED
+        assert root == backend, (
+            "requirements.txt and backend/requirements.txt have drifted. "
+            f"Only in root: {root - backend}. Only in backend: {backend - root}."
+        )
+
+    def test_postgres_driver_is_present_in_both(self):
+        """Without it the function cannot reach Supabase at all."""
+        assert "psycopg" in _packages(self.ROOT)
+        assert "psycopg" in _packages(self.BACKEND)
+
+    def test_root_manifest_is_installable_syntax(self):
+        """Every line is a comment, blank, or a plain requirement."""
+        for line in self.ROOT.read_text(encoding="utf-8").splitlines():
+            entry = line.split("#", 1)[0].strip()
+            if entry:
+                assert re.match(r"^[A-Za-z0-9._-]+(\[[A-Za-z0-9,._-]+\])?\s*[<>=!~].*$", entry), (
+                    f"unparseable requirement line: {entry!r}"
+                )

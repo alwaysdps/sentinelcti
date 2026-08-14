@@ -1,6 +1,22 @@
 # Root requirements for the Vercel Python runtime.
 #
-# Vercel looks for this file at the repository root to build the functions in
-# /api. It defers to backend/requirements.txt so there is one dependency list
-# rather than two that drift apart.
--r backend/requirements.txt
+# Vercel reads this file to build the functions in /api.
+#
+# WHY THIS DUPLICATES backend/requirements.txt
+# --------------------------------------------
+# The obvious approach -- `-r backend/requirements.txt` -- fails the build:
+# Vercel's parser does not support requirement-file includes and errors with
+# "could not parse requirements.txt". So the list is inlined here.
+#
+# Duplication invites drift, so `tests/test_serverless_deploy.py` asserts the
+# two files declare the same packages. Change one, and the suite tells you to
+# change the other.
+#
+# uvicorn is intentionally omitted: Vercel supplies the ASGI server, so a
+# standalone one would only add cold-start weight.
+fastapi>=0.115.0
+pydantic>=2.10.0
+pydantic-settings>=2.7.0
+SQLAlchemy>=2.0.36
+python-multipart>=0.0.20
+psycopg[binary]>=3.2
