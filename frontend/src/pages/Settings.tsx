@@ -6,6 +6,8 @@
  * what configures it.
  */
 
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Card,
   DefinitionRow,
@@ -16,7 +18,7 @@ import {
   VerdictBadge,
 } from '../components/ui';
 import { useFetch } from '../hooks/useAsync';
-import { api } from '../services/api';
+import { api, resetWorkspace } from '../services/api';
 import { formatBytes } from '../lib/format';
 import type { Verdict } from '../types/analysis';
 
@@ -31,6 +33,91 @@ function Toggle({ on, onLabel, offLabel }: { on: boolean; onLabel: string; offLa
       />
       {on ? onLabel : offLabel}
     </span>
+  );
+}
+
+/**
+ * Workspace control.
+ *
+ * The privacy policy tells people this exists, which is the reason it is here
+ * rather than buried in the API client: a documented way to walk away from a
+ * history has to be reachable without opening the developer console.
+ *
+ * It is careful about what it claims. Resetting stops *this browser* seeing the
+ * old analyses; it does not delete them, because the key that reached them is
+ * the only handle anyone had. Saying otherwise would be the comfortable lie.
+ */
+function WorkspaceCard() {
+  const [confirming, setConfirming] = useState(false);
+
+  function handleReset() {
+    resetWorkspace();
+    // A hard navigation, not a router push: the dashboard and history views
+    // hold data fetched under the previous key, and re-rendering them would
+    // keep showing analyses this browser can no longer reach.
+    window.location.assign('/dashboard');
+  }
+
+  return (
+    <Card
+      title="Your data"
+      description="This browser's private view of its own analyses, and how to walk away from it."
+    >
+      <p className="text-sm leading-relaxed text-content-secondary">
+        There are no accounts here. Your browser holds a random key and sends it with each request,
+        which is how the console shows you your own submissions and not anyone else's. It identifies
+        a browser, not a person — the same person on a phone and a laptop has two workspaces.
+      </p>
+
+      <div className="mt-4">
+        <InlineNotice tone="warning">
+          Starting a new workspace <strong className="text-content-primary">hides</strong> your
+          history rather than erasing it. The records stay in the database, but the key that reached
+          them is gone, so afterwards nobody — including you — can list or delete them. To remove
+          data, delete each report first, then reset.
+        </InlineNotice>
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        {confirming ? (
+          <>
+            <span className="text-sm text-content-secondary">
+              Start a new workspace and hide this browser's history?
+            </span>
+            <button
+              type="button"
+              onClick={handleReset}
+              className="btn border border-verdict-critical/40 bg-verdict-critical/10 px-3 py-1.5 text-xs text-verdict-critical hover:bg-verdict-critical/20"
+            >
+              Yes, start fresh
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              className="btn-ghost px-3 py-1.5 text-xs"
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            className="btn-secondary px-4 py-2 text-xs"
+          >
+            Start a new workspace
+          </button>
+        )}
+      </div>
+
+      <p className="mt-4 text-xs text-content-muted">
+        What is stored, for how long, and how to remove it is set out in the{' '}
+        <Link to="/privacy" className="text-accent hover:underline">
+          privacy policy
+        </Link>
+        .
+      </p>
+    </Card>
   );
 }
 
@@ -195,18 +282,8 @@ export default function Settings() {
             ))}
           </ul>
         </Card>
-      </div>
 
-      <div className="mt-5">
-        <Card title="Authentication">
-          <p className="text-sm leading-relaxed text-content-secondary">
-            This MVP runs without authentication so the threat-analysis engine stays the focus. The
-            backend is structured to accept it without rework: every route is mounted through a
-            single <code className="mono text-content-primary">api_router</code>, so a global{' '}
-            <code className="mono text-content-primary">Depends(require_user)</code> would apply
-            across the API in one line. Deploy this instance on a trusted network only.
-          </p>
-        </Card>
+        <WorkspaceCard />
       </div>
     </>
   );

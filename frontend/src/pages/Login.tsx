@@ -9,6 +9,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { ShieldMark } from '../components/Brand';
 import { useFetch } from '../hooks/useAsync';
 import { api, setAccessToken } from '../services/api';
 
@@ -96,16 +97,7 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-surface-0 px-4 py-12">
       <div className="w-full max-w-md">
         <div className="mb-8 flex flex-col items-center text-center">
-          <svg viewBox="0 0 32 32" className="h-11 w-11 text-accent" aria-hidden>
-            <path
-              fill="currentColor"
-              d="M16 2 4 7v9c0 7.2 5.1 13.9 12 15.5C22.9 29.9 28 23.2 28 16V7L16 2Zm0 3.3 9 3.7v7c0 5.7-3.8 11-9 12.5C10.8 27 7 21.7 7 16V9l9-3.7Z"
-            />
-            <path
-              fill="currentColor"
-              d="M14.6 19.4 11 15.8l1.8-1.8 1.8 1.8 4.6-4.6 1.8 1.8-6.4 6.4Z"
-            />
-          </svg>
+          <ShieldMark className="h-11 w-11" />
           <h1 className="mt-4 text-2xl font-semibold tracking-tight text-content-primary">
             SentinelCTI
           </h1>

@@ -1,7 +1,8 @@
 /** Application shell: sidebar navigation, header and content region. */
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Logo } from './Brand';
 import { useFetch } from '../hooks/useAsync';
 import { api } from '../services/api';
 
@@ -48,24 +49,6 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-function Logo() {
-  return (
-    <div className="flex items-center gap-2.5">
-      <svg viewBox="0 0 32 32" className="h-7 w-7 text-accent" aria-hidden>
-        <path
-          fill="currentColor"
-          d="M16 2 4 7v9c0 7.2 5.1 13.9 12 15.5C22.9 29.9 28 23.2 28 16V7L16 2Zm0 3.3 9 3.7v7c0 5.7-3.8 11-9 12.5C10.8 27 7 21.7 7 16V9l9-3.7Z"
-        />
-        <path fill="currentColor" d="M14.6 19.4 11 15.8l1.8-1.8 1.8 1.8 4.6-4.6 1.8 1.8-6.4 6.4Z" />
-      </svg>
-      <div className="leading-tight">
-        <p className="text-sm font-semibold tracking-tight text-content-primary">SentinelCTI</p>
-        <p className="text-[10px] tracking-[0.18em] text-content-muted uppercase">Threat Intel</p>
-      </div>
-    </div>
-  );
-}
-
 /** Live backend reachability, shown in the sidebar footer. */
 function HealthIndicator() {
   const { data, error, loading } = useFetch(() => api.health(), []);
@@ -87,8 +70,12 @@ function HealthIndicator() {
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col">
+      {/* The mark returns to the public front page, which is where a visitor
+          expects a logo to go and the only route out of the console. */}
       <div className="px-5 py-5">
-        <Logo />
+        <Link to="/" onClick={onNavigate} aria-label="SentinelCTI home">
+          <Logo />
+        </Link>
       </div>
 
       <nav className="flex-1 space-y-1 px-3" aria-label="Main navigation">
@@ -116,6 +103,14 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <p className="px-3 pb-2 text-[10px] leading-relaxed text-content-muted">
           Defensive analysis only. Files are never executed and URLs are never fetched.
         </p>
+        <div className="flex gap-3 px-3 pb-1 text-[10px] text-content-muted">
+          <Link to="/privacy" onClick={onNavigate} className="hover:text-content-secondary">
+            Privacy
+          </Link>
+          <Link to="/terms" onClick={onNavigate} className="hover:text-content-secondary">
+            Terms
+          </Link>
+        </div>
       </div>
     </div>
   );
@@ -173,7 +168,9 @@ export default function Layout() {
               />
             </svg>
           </button>
-          <Logo />
+          <Link to="/" aria-label="SentinelCTI home">
+            <Logo />
+          </Link>
         </header>
 
         <main id="main-content" className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">

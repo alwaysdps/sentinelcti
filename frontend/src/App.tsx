@@ -1,4 +1,11 @@
-/** Route table. The dashboard is the default landing page. */
+/**
+ * Route table.
+ *
+ * `/` is the public front page, deliberately outside the application shell: a
+ * first-time visitor should be told what the platform does and what it refuses
+ * to do before being handed a console full of aggregate numbers. Everything
+ * from `/dashboard` onwards is the console proper.
+ */
 
 import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
@@ -7,7 +14,10 @@ import Layout from './components/Layout';
 import Analyze from './pages/Analyze';
 import Dashboard from './pages/Dashboard';
 import History from './pages/History';
+import Landing from './pages/Landing';
 import Login from './pages/Login';
+import Privacy from './pages/legal/Privacy';
+import Terms from './pages/legal/Terms';
 import NotFound from './pages/NotFound';
 import Report from './pages/Report';
 import Settings from './pages/Settings';
@@ -46,12 +56,19 @@ export default function App() {
     <BrowserRouter>
       <UnauthorizedRedirect />
       <Routes>
-        {/* Standalone: the login placeholder has no sidebar, as a real sign-in
-            page would not be reachable from inside the authenticated shell. */}
+        {/* Standalone pages: neither belongs inside the console shell. The
+            front page addresses someone who has not decided to use the tool
+            yet, and a real sign-in page would not be reachable from inside the
+            authenticated shell. */}
+        <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
 
+        {/* Policies sit outside the shell too: they have to be readable by
+            someone deciding whether to use the tool at all. */}
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
+
         <Route element={<Layout />}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
 
           <Route path="/analyze" element={<Analyze />}>
