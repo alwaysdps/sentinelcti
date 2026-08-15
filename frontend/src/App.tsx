@@ -9,6 +9,7 @@
 
 import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import { setUnauthorizedHandler } from './services/api';
 import Layout from './components/Layout';
 import Analyze from './pages/Analyze';
@@ -54,6 +55,7 @@ function UnauthorizedRedirect() {
 export default function App() {
   return (
     <BrowserRouter>
+      <Analytics />
       <UnauthorizedRedirect />
       <Routes>
         {/* Standalone pages: neither belongs inside the console shell. The
