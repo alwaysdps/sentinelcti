@@ -9,6 +9,7 @@
 
 import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import { setUnauthorizedHandler } from './services/api';
 import Layout from './components/Layout';
 import Analyze from './pages/Analyze';
@@ -54,6 +55,17 @@ function UnauthorizedRedirect() {
 export default function App() {
   return (
     <BrowserRouter>
+      {/* Aggregate traffic measurement, disclosed in clause 6 of the privacy
+          policy. Inside the router so client-side route changes register as
+          page views -- a single-page app otherwise reports one view per visit,
+          no matter how far the visitor went.
+
+          Served and collected from this origin (`/_vercel/insights/...`), which
+          is what lets it run under the deployment's `script-src 'self'` CSP
+          without opening the policy to a third-party host. Cookieless, and it
+          stores nothing in the browser -- the reason the site still needs no
+          consent banner. */}
+      <Analytics />
       <UnauthorizedRedirect />
       <Routes>
         {/* Standalone pages: neither belongs inside the console shell. The

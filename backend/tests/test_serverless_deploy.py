@@ -74,6 +74,35 @@ class TestVercelConfig:
         assert not pattern.fullmatch("api/health")
         assert not pattern.fullmatch("assets/index-abc.js")
 
+    def test_spa_fallback_excludes_the_platform_namespace(self, config):
+        """Analytics is served from `/_vercel/insights/...` on this origin --
+        which is what lets it run under a `script-src 'self'` CSP.
+
+        Swallowed by the SPA fallback it would fail *silently*: the request
+        returns 200 with an HTML body, the script never executes, and the only
+        symptom is a dashboard reporting no traffic. Worth a test precisely
+        because there is no error to notice.
+        """
+        import re
+
+        fallback = next(r for r in config["rewrites"] if r["destination"] == "/index.html")
+        pattern = re.compile(fallback["source"].lstrip("/"))
+        assert not pattern.fullmatch("_vercel/insights/script.js")
+        assert not pattern.fullmatch("_vercel/insights/view")
+
+    def test_csp_permits_the_first_party_analytics_script(self, config):
+        """The privacy policy's no-consent-banner reasoning rests on analytics
+        being same-origin and cookieless. A CSP that forced a third-party host
+        would break that argument as well as the script."""
+        csp = next(
+            h["value"]
+            for e in config["headers"]
+            for h in e["headers"]
+            if h["key"] == "Content-Security-Policy"
+        )
+        assert "script-src 'self'" in csp
+        assert "connect-src 'self'" in csp
+
     def test_function_includes_the_application_package(self, config):
         """Without includeFiles the function imports nothing but itself."""
         fn = config["functions"]["api/index.py"]

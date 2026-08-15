@@ -178,22 +178,42 @@ const CLAUSES: Clause[] = [
           include IP addresses, and those are outside the application's control. See clause 9 for who
           those parties are.
         </P>
+        <P>
+          The analytics described in clause 6 also see your address as part of the request. It is used
+          to derive a country and a device type and is <Term>not retained against you</Term>: the
+          result is a count, not a visitor record, and nothing links a page view back to an address or
+          to anything you submitted.
+        </P>
       </>
     ),
   },
   {
     id: 'browser-storage',
-    title: 'Browser storage — and why there is no cookie banner',
+    title: 'Browser storage, analytics, and why there is no cookie banner',
     body: (
       <>
         <P>
-          The site sets <Term>no cookies at all</Term>. It runs no analytics, no advertising, no
-          tag manager, no session recording and no third-party scripts of any kind — the content
-          security policy on this deployment blocks scripts, styles, fonts, images and network
-          connections from any other origin. There is nothing to consent to, which is why you are not
-          asked to.
+          The site sets <Term>no cookies at all</Term>. It runs no advertising, no tag manager, no
+          session recording, and nothing that follows you to other websites.
         </P>
-        <P>Two values are kept in your browser's own storage:</P>
+        <P>
+          It does measure <Term>aggregate traffic</Term> — how many people visited, which pages they
+          opened, roughly where in the world they came from, what kind of device they used, and which
+          site referred them. This is how the operator knows whether anything is being used or broken.
+        </P>
+        <Callout>
+          <Term>The analytics are cookieless, and nothing is stored on your device for them.</Term>{' '}
+          They count visits rather than following visitors: no identifier is written to your browser,
+          no profile is built, and nothing is shared with an advertising network. Measurements are
+          collected from this site's own domain rather than a third-party tracking host.
+        </Callout>
+        <P>
+          That is the reason you are not shown a consent banner. UK and EU rules on cookies apply to
+          storing information on, or reading it from, your device — and analytics that store nothing
+          there do not engage them. Should that ever change, so would this, and you would be asked
+          before anything was set.
+        </P>
+        <P>Two values are kept in your browser's own storage, neither of them for analytics:</P>
         <FactTable
           rows={[
             {
@@ -217,8 +237,8 @@ const CLAUSES: Clause[] = [
           ]}
         />
         <P>
-          Neither is a cookie; neither is sent to any third party, and neither survives the end of
-          the browsing session.
+          Neither is a cookie, neither is sent to any third party, neither is used to measure
+          traffic, and neither survives the end of the browsing session.
         </P>
       </>
     ),
@@ -328,6 +348,17 @@ const CLAUSES: Clause[] = [
                 'Stores the analysis records described in clause 3, in the region configured for the instance.',
             },
             {
+              id: 'analytics',
+              label: 'Analytics provider',
+              value: (
+                <>
+                  Receives a record of the page view — page, referrer, coarse location, device type —
+                  to produce aggregate traffic counts. It never receives the indicators you submit or
+                  the contents of any report. See clause 6.
+                </>
+              ),
+            },
+            {
               id: 'resolver',
               label: 'DNS resolver',
               value: (
@@ -374,9 +405,15 @@ const CLAUSES: Clause[] = [
         <P>
           Where UK or EU data-protection law applies, the basis for processing is{' '}
           <Term>legitimate interests</Term>: operating a defensive security tool, showing you the
-          results of the analyses you asked for, and protecting the service from abuse through rate
-          limiting. That interest is balanced against the fact that the service asks for no personal
-          data, sets no cookies, and does no tracking or profiling.
+          results of the analyses you asked for, protecting the service from abuse through rate
+          limiting, and understanding in aggregate whether the service is being used and working.
+          That interest is balanced against the fact that the service asks for no personal data, sets
+          no cookies, builds no profile, and does not track anyone across sites.
+        </P>
+        <P>
+          Aggregate measurement is the mildest form this could take. It is counted rather than
+          recorded per visitor, which is what makes legitimate interests the appropriate basis rather
+          than consent — and it is why enabling it did not add a banner.
         </P>
         <P>
           Where an indicator you submit happens to contain personal data, you are the one who chose
@@ -469,7 +506,11 @@ export default function Privacy() {
       intro="What this service does with what you give it, written against the code rather than from a template."
       summary={
         <Bullets>
-          <Bullet>No accounts, no cookies, no analytics, no trackers, no advertising.</Bullet>
+          <Bullet>
+            No accounts, no cookies, no advertising, and nothing that follows you to other sites.
+            Visits are counted in aggregate, without storing anything on your device — which is why
+            there is no consent banner.
+          </Bullet>
           <Bullet>
             <Term>Nothing is shared between visitors.</Term> You see what you submitted in this
             session, and nothing else — a first visit shows an empty history.

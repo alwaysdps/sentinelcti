@@ -205,10 +205,11 @@ const CLAUSES: Clause[] = [
     title: 'Third-party services',
     body: (
       <P>
-        The service runs on third-party hosting and database infrastructure, may query a DNS resolver,
-        and may query external threat-intelligence providers where an operator has configured them.
-        Those parties operate under their own terms, and we are not responsible for their acts or
-        omissions. The privacy policy identifies which categories of provider are involved.
+        The service runs on third-party hosting and database infrastructure, records aggregate traffic
+        measurements through an analytics provider, may query a DNS resolver, and may query external
+        threat-intelligence providers where an operator has configured them. Those parties operate
+        under their own terms, and we are not responsible for their acts or omissions. The privacy
+        policy identifies which categories of provider are involved and what each one receives.
       </P>
     ),
   },
