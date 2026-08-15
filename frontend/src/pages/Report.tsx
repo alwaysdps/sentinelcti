@@ -9,7 +9,7 @@
 
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { RiskGauge } from '../components/RiskGauge';
+import { RiskArc } from '../components/Gauges';
 import {
   Card,
   DefinitionRow,
@@ -377,7 +377,7 @@ export default function Report() {
       <section className="card mb-5 overflow-hidden">
         <div className="flex flex-col items-center gap-7 p-6 sm:flex-row sm:items-start sm:p-7">
           <div className="text-center">
-            <RiskGauge score={data.risk_score} verdict={data.verdict} />
+            <RiskArc score={data.risk_score} verdict={data.verdict} />
             <p className="mt-3 text-[11px] tracking-widest text-content-muted uppercase">
               Risk Score
             </p>

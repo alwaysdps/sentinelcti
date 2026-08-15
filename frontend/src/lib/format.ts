@@ -15,11 +15,11 @@ export const VERDICT_LABEL: Record<Verdict, string> = {
  * takes fills as strings and the two must not drift apart.
  */
 export const VERDICT_COLOR: Record<Verdict, string> = {
-  clean: '#34d399',
-  low_risk: '#a3e635',
-  suspicious: '#fbbf24',
-  high_risk: '#fb923c',
-  critical: '#f43f5e',
+  clean: '#2ee6a6',
+  low_risk: '#9be36a',
+  suspicious: '#f5a524',
+  high_risk: '#fb7a6d',
+  critical: '#f4475f',
 };
 
 export const VERDICT_ORDER: Verdict[] = [

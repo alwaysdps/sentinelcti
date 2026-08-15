@@ -98,7 +98,7 @@ export function SeverityIcon({ severity }: { severity: Severity }) {
   const style = SEVERITY_STYLE[severity];
   return (
     <span
-      className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-current/25 bg-current/10 text-xs font-bold ${style.className}`}
+      className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-current/25 bg-current/10 text-xs font-bold ${style.className}`}
       title={`${style.label} severity`}
       aria-label={`${style.label} severity`}
     >
@@ -109,7 +109,7 @@ export function SeverityIcon({ severity }: { severity: Severity }) {
 
 export function IndicatorTypeBadge({ type }: { type: IndicatorType }) {
   return (
-    <span className="inline-flex items-center rounded-md border border-border-strong bg-surface-2 px-2 py-0.5 text-xs font-medium text-content-secondary">
+    <span className="inline-flex items-center rounded-full border border-border-subtle bg-surface-2 px-2.5 py-0.5 text-[11px] font-medium text-content-secondary">
       {INDICATOR_LABEL[type]}
     </span>
   );
@@ -145,7 +145,7 @@ export function StatusBadge({ status }: { status: AnalysisStatus }) {
 export function DemoBadge() {
   return (
     <span
-      className="inline-flex items-center rounded border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-accent uppercase"
+      className="inline-flex items-center rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-accent uppercase"
       title="Synthetic demo data created by the seed script — not real threat intelligence."
     >
       Demo

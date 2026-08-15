@@ -60,7 +60,7 @@ function Logo() {
       </svg>
       <div className="leading-tight">
         <p className="text-sm font-semibold tracking-tight text-content-primary">SentinelCTI</p>
-        <p className="text-[10px] tracking-widest text-content-muted uppercase">Threat Intel</p>
+        <p className="text-[10px] tracking-[0.18em] text-content-muted uppercase">Threat Intel</p>
       </div>
     </div>
   );
@@ -98,7 +98,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             to={item.to}
             onClick={onNavigate}
             className={({ isActive }) =>
-              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+              `flex items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium transition-colors ${
                 isActive
                   ? 'bg-accent/12 text-accent'
                   : 'text-content-secondary hover:bg-surface-2 hover:text-content-primary'

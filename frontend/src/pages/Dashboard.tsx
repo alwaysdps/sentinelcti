@@ -1,8 +1,16 @@
-/** Operational overview. Every figure comes from the live database. */
+/**
+ * Operational overview.
+ *
+ * Layout follows the reading order of a triage shift rather than the shape of
+ * the data: what is happening now (activity), how bad (gauges), what kind
+ * (distribution), and what specifically (recent). Every figure is aggregated
+ * from the database per request — nothing here is hard-coded or cached.
+ */
 
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ActivityChart, IndicatorTypeChart, RiskDistributionChart } from '../components/charts';
+import { ArcGauge, Sparkbars, StatusGlyph, type StatusKind } from '../components/Gauges';
 import { RiskBar } from '../components/RiskGauge';
 import {
   Card,
@@ -11,7 +19,6 @@ import {
   ErrorState,
   IndicatorTypeBadge,
   LoadingState,
-  PageHeader,
   VerdictBadge,
 } from '../components/ui';
 import { useFetch } from '../hooks/useAsync';
@@ -19,29 +26,38 @@ import { api } from '../services/api';
 import { formatRelative, truncate } from '../lib/format';
 import type { DashboardStats } from '../types/analysis';
 
-function StatCard({
-  label,
+/* -------------------------------------------------------------------------- */
+
+/** Bottom stat row: glyph, label, big figure, and the total it is drawn from. */
+function StatBlock({
+  kind,
   value,
-  hint,
-  accent,
+  total,
+  caption,
 }: {
-  label: string;
-  value: number | string;
-  hint: string;
-  accent: string;
+  kind: StatusKind;
+  value: number;
+  total: number;
+  caption: string;
 }) {
+  const labels: Record<StatusKind, string> = {
+    protected: 'Protected',
+    danger: 'Danger',
+    alert: 'Alerts',
+    unknown: 'Unknown',
+  };
+
   return (
-    <div className="card-padded">
-      <div className="flex items-start justify-between gap-3">
-        <p className="label-text">{label}</p>
-        <span
-          className="h-2 w-2 shrink-0 rounded-full"
-          style={{ backgroundColor: accent }}
-          aria-hidden
-        />
+    <div>
+      <div className="flex items-center gap-2.5">
+        <StatusGlyph kind={kind} />
+        <span className="text-sm font-medium text-content-primary">{labels[kind]}</span>
       </div>
-      <p className="mt-3 text-3xl font-semibold tabular-nums text-content-primary">{value}</p>
-      <p className="mt-1.5 text-xs text-content-muted">{hint}</p>
+      <p className="mt-5 text-xs text-content-muted">{caption}</p>
+      <p className="mt-1 flex items-baseline gap-1.5">
+        <span className="text-3xl font-semibold tabular-nums text-content-primary">{value}</span>
+        <span className="text-sm text-content-muted tabular-nums">/ {total}</span>
+      </p>
     </div>
   );
 }
@@ -51,7 +67,7 @@ function RecentAnalyses({ stats }: { stats: DashboardStats }) {
     return (
       <EmptyState
         title="No analyses yet"
-        message="Submit an indicator to see it appear here. Run the seed script to populate the dashboard with synthetic demo data."
+        message="Submit an indicator to see it appear here, or run the seed script to populate the dashboard with synthetic demo data."
         action={{ label: 'Analyze an indicator', to: '/analyze' }}
       />
     );
@@ -63,12 +79,12 @@ function RecentAnalyses({ stats }: { stats: DashboardStats }) {
         <li key={item.id}>
           <Link
             to={`/analysis/${item.reference}`}
-            className="flex items-center gap-4 px-1 py-3 transition-colors hover:bg-surface-2/60"
+            className="flex items-center gap-4 rounded-xl px-2 py-3 transition-colors hover:bg-surface-2/70"
           >
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <p className="mono truncate text-content-primary">
-                  {truncate(item.indicator_display, 52)}
+                  {truncate(item.indicator_display, 48)}
                 </p>
                 {item.is_demo && <DemoBadge />}
               </div>
@@ -88,6 +104,8 @@ function RecentAnalyses({ stats }: { stats: DashboardStats }) {
   );
 }
 
+/* -------------------------------------------------------------------------- */
+
 export default function Dashboard() {
   const [activityDays, setActivityDays] = useState(30);
   const { data, loading, error, refresh } = useFetch(
@@ -97,81 +115,91 @@ export default function Dashboard() {
 
   return (
     <>
-      <PageHeader
-        title="Dashboard"
-        subtitle="Live overview of every indicator analysed by this instance."
-        actions={
-          <Link to="/analyze" className="btn-primary">
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden>
-              <path
-                d="M12 5v14M5 12h14"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-            Analyze Indicator
-          </Link>
-        }
-      />
+      {/* Hero: oversized, low-weight heading with the primary action opposite. */}
+      <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-4xl leading-[1.05] font-light tracking-tight text-content-primary">
+            System
+            <br />
+            <span className="font-semibold">Performance</span>
+          </h1>
+          <p className="mt-3 text-sm text-content-muted">
+            {data ? `Live view across ${data.total_analyses} stored analyses` : 'Loading live view'}
+          </p>
+        </div>
+
+        <Link to="/analyze" className="btn-primary shrink-0">
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden>
+            <path
+              d="M12 5v14M5 12h14"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+            />
+          </svg>
+          Analyze Indicator
+        </Link>
+      </header>
 
       {loading && <LoadingState label="Loading dashboard…" />}
       {error && <ErrorState message={error.message} onRetry={refresh} />}
 
       {data && (
         <div className="space-y-5">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard
-              label="Total analyses"
-              value={data.total_analyses}
-              hint={`Average risk score ${data.average_risk_score}`}
-              accent="#38bdf8"
-            />
-            <StatCard
-              label="Malicious"
-              value={data.malicious_count}
-              hint="High risk and critical verdicts"
-              accent="#f43f5e"
-            />
-            <StatCard
-              label="Suspicious"
-              value={data.suspicious_count}
-              hint="Warrant manual review"
-              accent="#fbbf24"
-            />
-            <StatCard
-              label="Clean"
-              value={data.clean_count}
-              hint="Clean and low-risk verdicts"
-              accent="#34d399"
-            />
+          {/* Activity + gauges: the "what is happening" band. */}
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_260px]">
+            <Card
+              title="Analysis activity"
+              description="Submissions per day, aggregated from stored analyses."
+              actions={
+                <div className="pill-group">
+                  {[7, 30].map((days) => (
+                    <button
+                      key={days}
+                      type="button"
+                      onClick={() => setActivityDays(days)}
+                      className={`pill ${
+                        activityDays === days
+                          ? 'bg-accent/15 text-accent'
+                          : 'text-content-muted hover:text-content-primary'
+                      }`}
+                    >
+                      {days}d
+                    </button>
+                  ))}
+                </div>
+              }
+            >
+              <div className="mb-5">
+                <p className="label-text mb-2">Alert intensity</p>
+                <Sparkbars values={data.activity.map((point) => point.count)} />
+                <div className="mt-1 flex justify-between text-[11px] text-content-muted tabular-nums">
+                  <span>{data.activity[0]?.date.slice(5)}</span>
+                  <span>{data.activity[data.activity.length - 1]?.date.slice(5)}</span>
+                </div>
+              </div>
+              <ActivityChart activity={data.activity} />
+            </Card>
+
+            <div className="card flex flex-col items-center justify-center gap-8 p-6">
+              <ArcGauge
+                value={data.malicious_count}
+                max={Math.max(data.total_analyses, 1)}
+                label="Malicious indicators"
+                display={String(data.malicious_count)}
+                color="var(--color-verdict-critical)"
+              />
+              <ArcGauge
+                value={data.average_risk_score}
+                max={100}
+                label="Average risk score"
+                display={String(Math.round(data.average_risk_score))}
+                color="var(--color-accent)"
+              />
+            </div>
           </div>
 
-          <Card
-            title="Analysis activity"
-            description="Submissions per day, aggregated from stored analyses."
-            actions={
-              <div className="flex gap-1 rounded-lg border border-border-subtle bg-surface-2 p-0.5">
-                {[7, 30].map((days) => (
-                  <button
-                    key={days}
-                    type="button"
-                    onClick={() => setActivityDays(days)}
-                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                      activityDays === days
-                        ? 'bg-accent/15 text-accent'
-                        : 'text-content-muted hover:text-content-primary'
-                    }`}
-                  >
-                    {days}d
-                  </button>
-                ))}
-              </div>
-            }
-          >
-            <ActivityChart activity={data.activity} />
-          </Card>
-
+          {/* Distribution: the "what kind" band. */}
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             <Card title="Threat severity distribution" description="Verdicts across all analyses.">
               <RiskDistributionChart byVerdict={data.by_verdict} />
@@ -180,6 +208,39 @@ export default function Dashboard() {
               <IndicatorTypeChart byType={data.by_indicator_type} />
             </Card>
           </div>
+
+          {/* Totals: the headline counters, partitioning every stored analysis. */}
+          <Card
+            title="Total analyses by verdict"
+            description="Every stored analysis falls into exactly one of these."
+          >
+            <div className="grid grid-cols-2 gap-8 lg:grid-cols-4">
+              <StatBlock
+                kind="protected"
+                value={data.clean_count}
+                total={data.total_analyses}
+                caption="Clean and low risk"
+              />
+              <StatBlock
+                kind="danger"
+                value={data.malicious_count}
+                total={data.total_analyses}
+                caption="High risk and critical"
+              />
+              <StatBlock
+                kind="alert"
+                value={data.suspicious_count}
+                total={data.total_analyses}
+                caption="Warrant manual review"
+              />
+              <StatBlock
+                kind="unknown"
+                value={data.by_indicator_type.hash ?? 0}
+                total={data.total_analyses}
+                caption="Hash submissions"
+              />
+            </div>
+          </Card>
 
           <Card
             title="Recent analyses"

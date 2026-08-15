@@ -1,37 +1,46 @@
 @import 'tailwindcss';
 
 /*
- * Design tokens.
+ * Design tokens — "operations console" direction.
  *
- * The palette is a dark security-console theme, but readability is the
- * constraint that shapes it: body text sits at ~12:1 against the app
- * background and no status colour is ever the *only* carrier of meaning --
- * every verdict badge pairs its colour with a text label, and every chart
- * series is labelled. Colour-blind users lose nothing.
+ * The base is a near-black with a green cast rather than a neutral or navy
+ * one, so the teal accent reads as *emitted* light against it instead of
+ * sitting on top. Chroma is spent almost entirely on status: the interface
+ * itself is desaturated, which is what lets a single amber dot carry weight.
+ *
+ * Readability constrains the palette. Body text holds ~11:1 against the app
+ * background, and no status is ever carried by colour alone — every verdict
+ * badge pairs its hue with a written label and a distinct glyph, so the
+ * meaning survives greyscale and colour-blindness both.
  */
 @theme {
-  --color-surface-0: #070b14;
-  --color-surface-1: #0d1320;
-  --color-surface-2: #131b2c;
-  --color-surface-3: #1b2539;
-  --color-border-subtle: #1e2a41;
-  --color-border-strong: #2b3a56;
+  /* Surfaces: a tight, dark ramp. The steps are deliberately small so
+     elevation reads as depth rather than as separate blocks of colour. */
+  --color-surface-0: #070b0a;
+  --color-surface-1: #0c1211;
+  --color-surface-2: #121a18;
+  --color-surface-3: #18221f;
+  --color-border-subtle: #1a2724;
+  --color-border-strong: #273a35;
 
-  --color-content-primary: #e8eef8;
-  --color-content-secondary: #a3b1c9;
-  --color-content-muted: #6b7c99;
+  --color-content-primary: #e4f0ec;
+  --color-content-secondary: #93aaa3;
+  --color-content-muted: #638077;
 
-  --color-accent: #38bdf8;
-  --color-accent-strong: #0ea5e9;
-  --color-accent-dim: #0b3a52;
+  /* Spring teal. The one saturated hue in the chrome, reserved for the
+     active path: selected nav, primary action, live data. */
+  --color-accent: #2ee6a6;
+  --color-accent-strong: #14c98a;
+  --color-accent-dim: #0d3a2c;
+  --color-accent-glow: #2ee6a633;
 
-  /* Verdict scale: deliberately monotonic in both hue and lightness so the
-     severity order survives greyscale printing. */
-  --color-verdict-clean: #34d399;
-  --color-verdict-low: #a3e635;
-  --color-verdict-suspicious: #fbbf24;
-  --color-verdict-high: #fb923c;
-  --color-verdict-critical: #f43f5e;
+  /* Verdict scale. Monotonic in lightness as well as hue, so severity order
+     survives a greyscale print. */
+  --color-verdict-clean: #2ee6a6;
+  --color-verdict-low: #9be36a;
+  --color-verdict-suspicious: #f5a524;
+  --color-verdict-high: #fb7a6d;
+  --color-verdict-critical: #f4475f;
 
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
@@ -54,7 +63,7 @@
   :focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
-    border-radius: 4px;
+    border-radius: 9999px;
   }
 
   ::selection {
@@ -71,7 +80,7 @@
   }
   ::-webkit-scrollbar-thumb {
     background: var(--color-surface-3);
-    border-radius: 6px;
+    border-radius: 9999px;
     border: 2px solid var(--color-surface-0);
   }
   ::-webkit-scrollbar-thumb:hover {
@@ -85,34 +94,37 @@
  * Declared with `@utility` rather than inside `@layer components` because
  * Tailwind v4 only lets `@apply` reference real utilities -- a plain
  * `.card-padded { @apply card p-5 }` fails to build. Registering them as
- * utilities makes them composable with each other, which is what keeps the
- * button and card variants from duplicating their base declarations.
+ * utilities makes them composable, which keeps the variants from duplicating
+ * their base declarations.
  */
 @utility card {
-  @apply rounded-xl border border-border-subtle bg-surface-1;
+  @apply rounded-2xl border border-border-subtle bg-surface-1;
 }
 
 @utility card-padded {
-  @apply card p-5;
+  @apply card p-6;
 }
 
 @utility label-text {
-  @apply text-xs font-medium tracking-wide text-content-muted uppercase;
+  @apply text-[11px] font-medium tracking-[0.14em] text-content-muted uppercase;
 }
 
+/* Pills, not rectangles. The control language is fully rounded throughout —
+   filters, buttons, inputs — which is what makes the dense chrome read as
+   light rather than boxed-in. */
 @utility input-field {
-  @apply w-full rounded-lg border border-border-strong bg-surface-2 px-3.5 py-2.5 text-sm
+  @apply w-full rounded-full border border-border-strong bg-surface-2 px-4 py-2.5 text-sm
     text-content-primary placeholder:text-content-muted
     focus:border-accent focus:outline-none;
 }
 
 @utility btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm
+  @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm
     font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
 }
 
 @utility btn-primary {
-  @apply btn bg-accent-strong text-surface-0 hover:bg-accent;
+  @apply btn bg-accent text-surface-0 hover:bg-accent-strong;
 }
 
 @utility btn-secondary {
@@ -122,6 +134,15 @@
 
 @utility btn-ghost {
   @apply btn text-content-secondary hover:bg-surface-2 hover:text-content-primary;
+}
+
+/* Segmented control used for filters and range switches. */
+@utility pill-group {
+  @apply inline-flex items-center gap-1 rounded-full border border-border-subtle bg-surface-2 p-1;
+}
+
+@utility pill {
+  @apply rounded-full px-3 py-1 text-xs font-medium transition-colors;
 }
 
 @utility mono {

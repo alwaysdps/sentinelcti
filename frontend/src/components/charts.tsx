@@ -30,18 +30,18 @@ import {
   formatDateShort,
 } from '../lib/format';
 
-const AXIS_COLOR = '#6b7c99';
-const GRID_COLOR = '#1e2a41';
+const AXIS_COLOR = '#638077';
+const GRID_COLOR = '#1a2724';
 
 const TOOLTIP_STYLE = {
   contentStyle: {
-    backgroundColor: '#131b2c',
-    border: '1px solid #2b3a56',
-    borderRadius: '8px',
+    backgroundColor: '#121a18',
+    border: '1px solid #273a35',
+    borderRadius: '12px',
     fontSize: '12px',
-    color: '#e8eef8',
+    color: '#e4f0ec',
   },
-  labelStyle: { color: '#a3b1c9', marginBottom: 4 },
+  labelStyle: { color: '#93aaa3', marginBottom: 4 },
   cursor: { fill: '#ffffff08' },
 } as const;
 
@@ -77,7 +77,7 @@ export function RiskDistributionChart({ byVerdict }: { byVerdict: Record<Verdict
           innerRadius={52}
           outerRadius={82}
           paddingAngle={2}
-          stroke="#0d1320"
+          stroke="#0c1211"
           strokeWidth={2}
         >
           {data.map((entry) => (
@@ -90,7 +90,7 @@ export function RiskDistributionChart({ byVerdict }: { byVerdict: Record<Verdict
           height={36}
           iconType="circle"
           iconSize={8}
-          formatter={(value) => <span style={{ color: '#a3b1c9', fontSize: 12 }}>{value}</span>}
+          formatter={(value) => <span style={{ color: '#93aaa3', fontSize: 12 }}>{value}</span>}
         />
       </PieChart>
     </ResponsiveContainer>
@@ -110,12 +110,12 @@ export function ActivityChart({ activity }: { activity: ActivityPoint[] }) {
       <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -18 }}>
         <defs>
           <linearGradient id="fill-total" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.35} />
-            <stop offset="100%" stopColor="#38bdf8" stopOpacity={0.02} />
+            <stop offset="0%" stopColor="#2ee6a6" stopOpacity={0.35} />
+            <stop offset="100%" stopColor="#2ee6a6" stopOpacity={0.02} />
           </linearGradient>
           <linearGradient id="fill-malicious" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#f43f5e" stopOpacity={0.35} />
-            <stop offset="100%" stopColor="#f43f5e" stopOpacity={0.02} />
+            <stop offset="0%" stopColor="#f4475f" stopOpacity={0.35} />
+            <stop offset="100%" stopColor="#f4475f" stopOpacity={0.02} />
           </linearGradient>
         </defs>
         <CartesianGrid stroke={GRID_COLOR} strokeDasharray="3 3" vertical={false} />
@@ -140,13 +140,13 @@ export function ActivityChart({ activity }: { activity: ActivityPoint[] }) {
           height={28}
           iconType="circle"
           iconSize={8}
-          formatter={(value) => <span style={{ color: '#a3b1c9', fontSize: 12 }}>{value}</span>}
+          formatter={(value) => <span style={{ color: '#93aaa3', fontSize: 12 }}>{value}</span>}
         />
         <Area
           type="monotone"
           dataKey="count"
           name="All analyses"
-          stroke="#38bdf8"
+          stroke="#2ee6a6"
           strokeWidth={2}
           fill="url(#fill-total)"
         />
@@ -154,7 +154,7 @@ export function ActivityChart({ activity }: { activity: ActivityPoint[] }) {
           type="monotone"
           dataKey="malicious"
           name="High risk & critical"
-          stroke="#f43f5e"
+          stroke="#f4475f"
           strokeWidth={2}
           fill="url(#fill-malicious)"
         />
@@ -191,7 +191,7 @@ export function IndicatorTypeChart({ byType }: { byType: Record<IndicatorType, n
           width={38}
         />
         <Tooltip {...TOOLTIP_STYLE} />
-        <Bar dataKey="value" name="Analyses" fill="#38bdf8" radius={[4, 4, 0, 0]} maxBarSize={54} />
+        <Bar dataKey="value" name="Analyses" fill="#2ee6a6" radius={[4, 4, 0, 0]} maxBarSize={54} />
       </BarChart>
     </ResponsiveContainer>
   );
