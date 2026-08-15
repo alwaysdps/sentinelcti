@@ -431,6 +431,15 @@ The seed script runs the **real** analysis pipeline over reserved, non-routable 
 
 > **Seeded rows are no longer visible in the UI.** They are flagged `is_demo` and belong to no workspace, and [session-scoped history](#session-scoped-history) shows a visitor only their own submissions. The script remains useful for exercising the pipeline and inspecting the database directly; it will not populate anyone's dashboard.
 
+Because they are invisible and no API route can remove them — an endpoint able to delete rows nobody owns could empty the database for everyone — clearing them out is a maintenance task:
+
+```bash
+cd backend && python -m scripts.purge_demo        # report only
+cd backend && python -m scripts.purge_demo --yes  # delete them
+```
+
+It reports before it acts, prints the database it is pointed at with the password redacted, and matches on `is_demo` alone, so a real visitor's analysis cannot be caught by it.
+
 > The EICAR test file is seeded as a *hash*, never written to disk: EICAR exists precisely so endpoint protection fires on it, and on a machine with real-time scanning the write is intercepted.
 
 ### Try it
