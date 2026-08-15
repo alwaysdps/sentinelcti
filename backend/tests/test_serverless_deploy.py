@@ -88,6 +88,18 @@ class TestVercelConfig:
             settings.file_analysis_timeout_seconds
         )
 
+    def test_no_memory_setting(self, config):
+        """Vercel warns on every build that `memory` is ignored under Active CPU
+        billing. Keeping it would just reprint the warning forever."""
+        assert "memory" not in config["functions"]["api/index.py"]
+
+    def test_python_version_is_pinned(self):
+        """Unpinned, the build logs 'No Python version specified' and takes
+        whatever Vercel currently defaults to -- which can change under you."""
+        pin = REPO_ROOT / ".python-version"
+        assert pin.exists(), "add a .python-version file"
+        assert pin.read_text(encoding="utf-8").strip() == "3.12"
+
     def test_security_headers_are_declared(self, config):
         headers = {
             h["key"]
