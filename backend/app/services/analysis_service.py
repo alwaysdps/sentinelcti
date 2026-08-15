@@ -30,7 +30,7 @@ from ..models.analysis import Analysis
 from ..models.enums import AnalysisStatus, ProviderResult, Severity
 from ..providers import registry
 from ..providers.base import ProviderLookup
-from . import storage
+from . import query_service, storage
 from .risk_engine import assess
 
 REFERENCE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no I/O/0/1: unambiguous when read aloud
@@ -93,7 +93,13 @@ def provider_signals(lookups: list[ProviderLookup]) -> list[Signal]:
 # --------------------------------------------------------------------------
 # Pipeline
 # --------------------------------------------------------------------------
-async def run_pipeline(db: Session, result: AnalyzerResult, *, is_demo: bool = False) -> Analysis:
+async def run_pipeline(
+    db: Session,
+    result: AnalyzerResult,
+    *,
+    is_demo: bool = False,
+    owner_key: str | None = None,
+) -> Analysis:
     started = time.perf_counter()
 
     lookups = await registry.lookup_all(result.indicator_type, result.lookup_key)
@@ -129,6 +135,7 @@ async def run_pipeline(db: Session, result: AnalyzerResult, *, is_demo: bool = F
         mitre_techniques=mitre.resolve(technique_ids),
         duration_seconds=round(duration, 4),
         is_demo=is_demo,
+        owner_key=owner_key,
     )
 
     _persist_with_unique_reference(db, record)
@@ -167,20 +174,28 @@ def _finding_dict(s: Signal) -> dict:
 
 
 # --- Entry points per indicator type --------------------------------------
-async def analyze_url(db: Session, value: str, *, is_demo: bool = False) -> Analysis:
-    return await run_pipeline(db, url_analyzer.analyze(value), is_demo=is_demo)
+async def analyze_url(
+    db: Session, value: str, *, is_demo: bool = False, owner_key: str | None = None
+) -> Analysis:
+    return await run_pipeline(db, url_analyzer.analyze(value), is_demo=is_demo, owner_key=owner_key)
 
 
-async def analyze_domain(db: Session, value: str, *, is_demo: bool = False) -> Analysis:
-    return await run_pipeline(db, domain_analyzer.analyze(value), is_demo=is_demo)
+async def analyze_domain(
+    db: Session, value: str, *, is_demo: bool = False, owner_key: str | None = None
+) -> Analysis:
+    return await run_pipeline(db, domain_analyzer.analyze(value), is_demo=is_demo, owner_key=owner_key)
 
 
-async def analyze_ip(db: Session, value: str, *, is_demo: bool = False) -> Analysis:
-    return await run_pipeline(db, ip_analyzer.analyze(value), is_demo=is_demo)
+async def analyze_ip(
+    db: Session, value: str, *, is_demo: bool = False, owner_key: str | None = None
+) -> Analysis:
+    return await run_pipeline(db, ip_analyzer.analyze(value), is_demo=is_demo, owner_key=owner_key)
 
 
-async def analyze_hash(db: Session, value: str, *, is_demo: bool = False) -> Analysis:
-    return await run_pipeline(db, hash_analyzer.analyze(value), is_demo=is_demo)
+async def analyze_hash(
+    db: Session, value: str, *, is_demo: bool = False, owner_key: str | None = None
+) -> Analysis:
+    return await run_pipeline(db, hash_analyzer.analyze(value), is_demo=is_demo, owner_key=owner_key)
 
 
 # Bounds how many samples are being inspected at once. Each analysis holds a
@@ -190,7 +205,13 @@ _file_analysis_slots = asyncio.Semaphore(settings.max_concurrent_file_analyses)
 
 
 async def analyze_file(
-    db: Session, stored_path: Path, original_filename: str, size: int, *, is_demo: bool = False
+    db: Session,
+    stored_path: Path,
+    original_filename: str,
+    size: int,
+    *,
+    is_demo: bool = False,
+    owner_key: str | None = None,
 ) -> Analysis:
     """Analyse an already-quarantined upload, then remove the bytes.
 
@@ -219,7 +240,7 @@ async def analyze_file(
                 size,
                 budget=budget,
             )
-        return await run_pipeline(db, result, is_demo=is_demo)
+        return await run_pipeline(db, result, is_demo=is_demo, owner_key=owner_key)
     finally:
         if settings.delete_uploads_after_analysis:
             storage.discard(stored_path)
@@ -228,19 +249,39 @@ async def analyze_file(
 # --------------------------------------------------------------------------
 # Queries
 # --------------------------------------------------------------------------
-def get_by_reference_or_id(db: Session, identifier: str) -> Analysis:
-    """Accept either the numeric id or the SC- reference, so report URLs and
-    API ids are interchangeable for the caller."""
-    stmt = select(Analysis).where(Analysis.reference == identifier.upper())
+def get_by_reference_or_id(
+    db: Session, identifier: str, *, owner_key: str | None = None
+) -> Analysis:
+    """Fetch by numeric id or SC- reference, scoped to the caller's workspace.
+
+    Scoping matters here as much as in the listing: references are short, and
+    an unscoped lookup would let anyone read another workspace's report by
+    guessing or sharing one. A row outside the caller's scope is reported as
+    "not found" rather than "forbidden" -- the distinction would itself confirm
+    that a given reference exists.
+    """
+    scope = query_service.visible_to(owner_key)
+    stmt = select(Analysis).where(Analysis.reference == identifier.upper(), scope)
     record = db.execute(stmt).scalar_one_or_none()
     if record is None and identifier.isdigit():
-        record = db.get(Analysis, int(identifier))
+        record = db.execute(
+            select(Analysis).where(Analysis.id == int(identifier), scope)
+        ).scalar_one_or_none()
     if record is None:
         raise NotFoundError(f"No analysis found for '{identifier}'.")
     return record
 
 
-def delete_analysis(db: Session, identifier: str) -> None:
-    record = get_by_reference_or_id(db, identifier)
+def delete_analysis(db: Session, identifier: str, *, owner_key: str | None = None) -> None:
+    """Delete one of the caller's own analyses.
+
+    Ownership is the authorisation: you may remove what you created, and
+    nothing else. Shared demo rows belong to no workspace, so they are
+    permanently read-only -- which is what keeps a first-time visitor's
+    dashboard from being emptied by a passer-by.
+    """
+    record = get_by_reference_or_id(db, identifier, owner_key=owner_key)
+    if record.is_demo or record.owner_key is None or record.owner_key != owner_key:
+        raise NotFoundError(f"No analysis found for '{identifier}'.")
     db.execute(delete(Analysis).where(Analysis.id == record.id))
     db.commit()

@@ -37,15 +37,32 @@ class Page:
         return max(1, -(-self.total // self.page_size))  # ceil division
 
 
+def visible_to(owner_key: str | None):
+    """The single visibility rule: your own workspace, plus shared demo data.
+
+    Every read goes through this. Keeping it in one expression -- rather than
+    repeating `where(owner_key == ...)` at each call site -- is what stops a
+    future query from silently exposing one workspace to another, which is the
+    failure this whole feature exists to prevent.
+    """
+    if owner_key is None:
+        # No workspace: shared demo data only. A client with storage disabled
+        # still gets a working tool, it just does not accumulate history.
+        return Analysis.is_demo.is_(True)
+    return (Analysis.owner_key == owner_key) | Analysis.is_demo.is_(True)
+
+
 def _apply_filters(
     stmt: Select,
     *,
+    owner_key: str | None,
     search: str | None,
     indicator_type: IndicatorType | None,
     verdict: Verdict | None,
     min_score: int | None,
     max_score: int | None,
 ) -> Select:
+    stmt = stmt.where(visible_to(owner_key))
     if search:
         # ORM `like` binds the pattern as a parameter; the wildcards are ours,
         # the value is never concatenated into SQL text.
@@ -67,6 +84,7 @@ def _apply_filters(
 def list_analyses(
     db: Session,
     *,
+    owner_key: str | None = None,
     page: int = 1,
     page_size: int = 20,
     search: str | None = None,
@@ -81,6 +99,7 @@ def list_analyses(
     page_size = max(1, min(100, page_size))
 
     filters = {
+        "owner_key": owner_key,
         "search": search,
         "indicator_type": indicator_type,
         "verdict": verdict,
@@ -107,27 +126,37 @@ def list_analyses(
     return Page(items=items, total=total, page=page, page_size=page_size)
 
 
-def dashboard_stats(db: Session, *, activity_days: int = 30) -> dict:
-    total = db.execute(select(func.count()).select_from(Analysis)).scalar_one()
+def dashboard_stats(db: Session, *, owner_key: str | None = None, activity_days: int = 30) -> dict:
+    # Every aggregate is scoped to the caller's workspace. A dashboard that
+    # counted other people's submissions would leak both their activity volume
+    # and, through "recent", the indicators themselves.
+    scope = visible_to(owner_key)
+
+    total = db.execute(select(func.count()).select_from(Analysis).where(scope)).scalar_one()
 
     verdict_rows = db.execute(
-        select(Analysis.verdict, func.count()).group_by(Analysis.verdict)
+        select(Analysis.verdict, func.count()).where(scope).group_by(Analysis.verdict)
     ).all()
     by_verdict = {v.value: 0 for v in Verdict}
     for verdict, count in verdict_rows:
         by_verdict[str(verdict)] = count
 
     type_rows = db.execute(
-        select(Analysis.indicator_type, func.count()).group_by(Analysis.indicator_type)
+        select(Analysis.indicator_type, func.count()).where(scope).group_by(Analysis.indicator_type)
     ).all()
     by_type = {t.value: 0 for t in IndicatorType}
     for indicator_type, count in type_rows:
         by_type[str(indicator_type)] = count
 
-    average_score = db.execute(select(func.avg(Analysis.risk_score))).scalar() or 0
+    average_score = db.execute(select(func.avg(Analysis.risk_score)).where(scope)).scalar() or 0
 
     recent = list(
-        db.execute(select(Analysis).order_by(Analysis.created_at.desc(), Analysis.id.desc()).limit(8))
+        db.execute(
+            select(Analysis)
+            .where(scope)
+            .order_by(Analysis.created_at.desc(), Analysis.id.desc())
+            .limit(8)
+        )
         .scalars()
         .all()
     )
@@ -142,7 +171,7 @@ def dashboard_stats(db: Session, *, activity_days: int = 30) -> dict:
         "average_risk_score": round(float(average_score), 1),
         "by_verdict": by_verdict,
         "by_indicator_type": by_type,
-        "activity": activity_series(db, days=activity_days),
+        "activity": activity_series(db, owner_key=owner_key, days=activity_days),
         "recent": recent,
     }
 
@@ -170,7 +199,7 @@ def _day_key(value) -> str:
     return str(value)[:10]
 
 
-def activity_series(db: Session, *, days: int = 30) -> list[dict]:
+def activity_series(db: Session, *, owner_key: str | None = None, days: int = 30) -> list[dict]:
     """Per-day counts for the last N days, zero-filled.
 
     Zero-filling in Python rather than SQL keeps this portable: generating a
@@ -188,7 +217,7 @@ def activity_series(db: Session, *, days: int = 30) -> list[dict]:
                 case((Analysis.verdict.in_([Verdict.HIGH_RISK, Verdict.CRITICAL]), 1), else_=0)
             ).label("malicious"),
         )
-        .where(Analysis.created_at >= since_midnight)
+        .where(Analysis.created_at >= since_midnight, visible_to(owner_key))
         .group_by(bucket)
     ).all()
 

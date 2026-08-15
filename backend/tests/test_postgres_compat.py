@@ -65,6 +65,7 @@ class TestQueryPortability:
 
         statement = _apply_filters(
             select(Analysis),
+            owner_key="w" * 32,
             search="evil",
             indicator_type=IndicatorType.URL,
             verdict=Verdict.HIGH_RISK,

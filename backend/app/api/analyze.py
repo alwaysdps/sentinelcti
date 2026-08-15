@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, Depends, File, UploadFile, status
+from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from ..core.config import settings
 from ..core.errors import ValidationFailure
+from ..core.owner import resolve_owner_key
 from ..database import get_db
 from ..schemas.analysis import (
     AnalysisDetail,
@@ -46,8 +47,12 @@ _RESPONSES = {
         "operator."
     ),
 )
-async def analyze_url(payload: URLAnalysisRequest, db: Session = Depends(get_db)) -> AnalysisDetail:
-    record = await analysis_service.analyze_url(db, payload.url)
+async def analyze_url(
+    request: Request, payload: URLAnalysisRequest, db: Session = Depends(get_db)
+) -> AnalysisDetail:
+    record = await analysis_service.analyze_url(
+        db, payload.url, owner_key=resolve_owner_key(request)
+    )
     return AnalysisDetail.model_validate(record, from_attributes=True)
 
 
@@ -65,8 +70,12 @@ async def analyze_url(payload: URLAnalysisRequest, db: Session = Depends(get_db)
         "services."
     ),
 )
-async def analyze_domain(payload: DomainAnalysisRequest, db: Session = Depends(get_db)) -> AnalysisDetail:
-    record = await analysis_service.analyze_domain(db, payload.domain)
+async def analyze_domain(
+    request: Request, payload: DomainAnalysisRequest, db: Session = Depends(get_db)
+) -> AnalysisDetail:
+    record = await analysis_service.analyze_domain(
+        db, payload.domain, owner_key=resolve_owner_key(request)
+    )
     return AnalysisDetail.model_validate(record, from_attributes=True)
 
 
@@ -83,8 +92,12 @@ async def analyze_domain(payload: DomainAnalysisRequest, db: Session = Depends(g
         "connection attempt."
     ),
 )
-async def analyze_ip(payload: IPAnalysisRequest, db: Session = Depends(get_db)) -> AnalysisDetail:
-    record = await analysis_service.analyze_ip(db, payload.ip)
+async def analyze_ip(
+    request: Request, payload: IPAnalysisRequest, db: Session = Depends(get_db)
+) -> AnalysisDetail:
+    record = await analysis_service.analyze_ip(
+        db, payload.ip, owner_key=resolve_owner_key(request)
+    )
     return AnalysisDetail.model_validate(record, from_attributes=True)
 
 
@@ -102,8 +115,12 @@ async def analyze_ip(payload: IPAnalysisRequest, db: Session = Depends(get_db)) 
         "the SHA-256 of the harmless EICAR anti-malware test file."
     ),
 )
-async def analyze_hash(payload: HashAnalysisRequest, db: Session = Depends(get_db)) -> AnalysisDetail:
-    record = await analysis_service.analyze_hash(db, payload.hash)
+async def analyze_hash(
+    request: Request, payload: HashAnalysisRequest, db: Session = Depends(get_db)
+) -> AnalysisDetail:
+    record = await analysis_service.analyze_hash(
+        db, payload.hash, owner_key=resolve_owner_key(request)
+    )
     return AnalysisDetail.model_validate(record, from_attributes=True)
 
 
@@ -131,6 +148,7 @@ async def analyze_hash(payload: HashAnalysisRequest, db: Session = Depends(get_d
     ),
 )
 async def analyze_file(
+    request: Request,
     file: UploadFile = File(..., description=f"Max {settings.max_upload_bytes // (1024 * 1024)} MB."),
     db: Session = Depends(get_db),
 ) -> AnalysisDetail:
@@ -147,5 +165,7 @@ async def analyze_file(
     # both the read and the quarantine write are blocking I/O. Off the event
     # loop they go, alongside the analysis itself.
     stored_path, size = await asyncio.to_thread(storage.store_stream, chunks())
-    record = await analysis_service.analyze_file(db, stored_path, file.filename, size)
+    record = await analysis_service.analyze_file(
+        db, stored_path, file.filename, size, owner_key=resolve_owner_key(request)
+    )
     return AnalysisDetail.model_validate(record, from_attributes=True)

@@ -93,6 +93,53 @@ function fallbackMessage(status: number): string {
  */
 const TOKEN_KEY = 'sentinelcti.access_token';
 
+/**
+ * Anonymous workspace key.
+ *
+ * Generated once per browser and sent with every request, so each visitor sees
+ * only their own analyses (plus the shared demo data) without ever creating an
+ * account. See the backend's `core/owner.py` for the threat model.
+ *
+ * localStorage, not sessionStorage: history should survive closing the tab,
+ * which is the whole point. It does not survive clearing site data — an
+ * accepted trade for having no login.
+ *
+ * 256 bits from the platform CSPRNG. Guessing another workspace has to be
+ * infeasible, because holding the key *is* the claim to it.
+ */
+const WORKSPACE_KEY = 'sentinelcti.workspace';
+
+function createWorkspaceKey(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export function getWorkspaceKey(): string {
+  try {
+    let key = localStorage.getItem(WORKSPACE_KEY);
+    if (!key || !/^[A-Za-z0-9_-]{32,64}$/.test(key)) {
+      key = createWorkspaceKey();
+      localStorage.setItem(WORKSPACE_KEY, key);
+    }
+    return key;
+  } catch {
+    // Storage blocked (private mode, hardened settings). The app still works;
+    // the server treats a missing key as "no workspace", so the visitor sees
+    // the shared demo data and their submissions simply are not retained.
+    return '';
+  }
+}
+
+/** Discards this browser's history by starting a fresh workspace. */
+export function resetWorkspace(): void {
+  try {
+    localStorage.setItem(WORKSPACE_KEY, createWorkspaceKey());
+  } catch {
+    /* storage unavailable — nothing was being retained anyway */
+  }
+}
+
 export function setAccessToken(token: string): void {
   if (token) sessionStorage.setItem(TOKEN_KEY, token);
   else sessionStorage.removeItem(TOKEN_KEY);
@@ -103,8 +150,16 @@ export function getAccessToken(): string {
 }
 
 function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
   const token = getAccessToken();
-  return token ? { 'X-Access-Token': token } : {};
+  if (token) headers['X-Access-Token'] = token;
+
+  // Sent as a header, never a query parameter: a key in the URL would leak
+  // into server logs, browser history and the Referer sent to third parties.
+  const workspace = getWorkspaceKey();
+  if (workspace) headers['X-Owner-Key'] = workspace;
+
+  return headers;
 }
 
 /**

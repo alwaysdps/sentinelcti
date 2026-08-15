@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from ..core import access, cloudflare
+from ..core.owner import resolve_owner_key
 from ..core.config import settings
 from ..database import get_db
 from ..database.session import backend_name
@@ -71,10 +72,13 @@ def health(db: Session = Depends(get_db)) -> HealthResponse:
     ),
 )
 def dashboard(
+    request: Request,
     db: Session = Depends(get_db),
     activity_days: int = Query(30, ge=7, le=90, description="Length of the activity series."),
 ) -> DashboardStats:
-    stats = query_service.dashboard_stats(db, activity_days=activity_days)
+    stats = query_service.dashboard_stats(
+        db, owner_key=resolve_owner_key(request), activity_days=activity_days
+    )
     stats["recent"] = [AnalysisSummary.model_validate(r, from_attributes=True) for r in stats["recent"]]
     return DashboardStats(**stats)
 

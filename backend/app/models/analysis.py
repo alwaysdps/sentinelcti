@@ -61,8 +61,15 @@ class Analysis(Base):
     )
 
     # Seeded rows are synthetic. Flagging them keeps demo data from being
-    # mistaken for real intelligence in screenshots or exports.
+    # mistaken for real intelligence in screenshots or exports. They are also
+    # the one category visible to every workspace.
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # Anonymous workspace this analysis belongs to. NULL means unowned: seeded
+    # demo rows, and anything created by a client that sent no key. Indexed
+    # because every read filters on it. See core/owner.py for the threat model
+    # -- this is isolation between browsers, not authentication.
+    owner_key: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
 
     __table_args__ = (
         Index("ix_analyses_created_type", "created_at", "indicator_type"),

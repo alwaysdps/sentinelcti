@@ -86,7 +86,14 @@ def _clean_table():
 
 @pytest.fixture
 def client() -> TestClient:
-    with TestClient(app) as test_client:
+    """A client carrying a workspace key, like a real browser.
+
+    Analyses are scoped to an anonymous workspace (see core/owner.py), so a
+    client with no key creates rows owned by nobody and then cannot see them —
+    correct behaviour, but not what most tests are exercising. Tests that care
+    about isolation set the header explicitly, which overrides this default.
+    """
+    with TestClient(app, headers={"X-Owner-Key": "t" * 32}) as test_client:
         yield test_client
 
 

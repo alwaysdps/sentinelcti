@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Depends, Path, Query, Request
 from sqlalchemy.orm import Session
 
+from ..core.owner import resolve_owner_key
 from ..database import get_db
 from ..models.enums import IndicatorType, Verdict
 from ..schemas.analysis import AnalysisDetail, DeleteResponse, PaginatedAnalyses
@@ -41,6 +42,7 @@ class SortField(StrEnum):
     ),
 )
 def list_analyses(
+    request: Request,
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1, description="1-based page number."),
     page_size: int = Query(20, ge=1, le=100),
@@ -58,6 +60,7 @@ def list_analyses(
 ) -> PaginatedAnalyses:
     page_result = query_service.list_analyses(
         db,
+        owner_key=resolve_owner_key(request),
         page=page,
         page_size=page_size,
         search=search,
@@ -85,10 +88,11 @@ def list_analyses(
     description="Accepts either the numeric id or the SC-XXXXXX reference.",
 )
 def get_analysis(
+    request: Request,
     identifier: str = Path(..., max_length=32, examples=["SC-K7M2QP"]),
     db: Session = Depends(get_db),
 ) -> AnalysisDetail:
-    record = analysis_service.get_by_reference_or_id(db, identifier)
+    record = analysis_service.get_by_reference_or_id(db, identifier, owner_key=resolve_owner_key(request))
     return AnalysisDetail.model_validate(record, from_attributes=True)
 
 
@@ -103,10 +107,11 @@ def get_analysis(
     ),
 )
 def delete_analysis(
+    request: Request,
     identifier: str = Path(..., max_length=32),
     db: Session = Depends(get_db),
 ) -> DeleteResponse:
-    record = analysis_service.get_by_reference_or_id(db, identifier)
+    record = analysis_service.get_by_reference_or_id(db, identifier, owner_key=resolve_owner_key(request))
     reference = record.reference
-    analysis_service.delete_analysis(db, identifier)
+    analysis_service.delete_analysis(db, identifier, owner_key=resolve_owner_key(request))
     return DeleteResponse(deleted=True, reference=reference)
