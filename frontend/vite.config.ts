@@ -5,7 +5,12 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
-    port: 5173,
+    // 5173 by default, but `PORT` wins so a second instance can be told which
+    // port to take. Left to itself Vite silently increments to the next free
+    // port, which breaks anything that was told where to look -- strictPort
+    // turns that into an immediate failure whenever the port was chosen for us.
+    port: Number(process.env.PORT ?? 5173),
+    strictPort: Boolean(process.env.PORT),
     // Vite rejects requests whose Host header it does not recognise (a DNS
     // rebinding defence). A Cloudflare Quick Tunnel arrives as
     // *.trycloudflare.com, so without this the tunnel returns "Blocked
