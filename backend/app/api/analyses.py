@@ -10,10 +10,34 @@ from sqlalchemy.orm import Session
 from ..core.owner import resolve_owner_key
 from ..database import get_db
 from ..models.enums import IndicatorType, Verdict
-from ..schemas.analysis import AnalysisDetail, DeleteResponse, PaginatedAnalyses
+from ..schemas.analysis import AnalysisDetail, DeleteResponse, PaginatedAnalyses, PurgeResponse
 from ..services import analysis_service, query_service
 
 router = APIRouter(prefix="/api/analyses", tags=["History"])
+
+
+@router.post(
+    "/purge",
+    response_model=PurgeResponse,
+    summary="Delete every analysis in the caller's workspace",
+    description=(
+        "Empties the workspace identified by the `X-Owner-Key` header. Rows belonging "
+        "to any other workspace are untouched, and a request without a valid key "
+        "deletes nothing.\n\n"
+        "The browser calls this as the tab closes, which is what makes a session's "
+        "history disposable rather than merely hidden. It is also safe to call "
+        "directly to clear your history on demand.\n\n"
+        "Deliberately POST rather than DELETE: deployments commonly gate DELETE behind "
+        "a shared token to stop a passer-by emptying the database, and this operation "
+        "needs no such protection — the key you present is the only thing it can act on."
+    ),
+)
+def purge_workspace(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> PurgeResponse:
+    removed = analysis_service.purge_workspace(db, resolve_owner_key(request))
+    return PurgeResponse(deleted=removed)
 
 
 class SortField(StrEnum):

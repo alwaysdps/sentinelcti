@@ -12,8 +12,10 @@ tests without a running server.
 from __future__ import annotations
 
 import asyncio
+import logging
 import secrets
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from sqlalchemy import delete, select
@@ -32,6 +34,8 @@ from ..providers import registry
 from ..providers.base import ProviderLookup
 from . import query_service, storage
 from .risk_engine import assess
+
+logger = logging.getLogger("sentinelcti")
 
 REFERENCE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no I/O/0/1: unambiguous when read aloud
 
@@ -139,6 +143,10 @@ async def run_pipeline(
     )
 
     _persist_with_unique_reference(db, record)
+    # Housekeeping rides on write traffic rather than a scheduler: there is no
+    # long-running process here to hang one off. Rate-limited internally, and
+    # it cannot fail the analysis that just succeeded.
+    maybe_purge_expired(db)
     return record
 
 
@@ -276,12 +284,72 @@ def delete_analysis(db: Session, identifier: str, *, owner_key: str | None = Non
     """Delete one of the caller's own analyses.
 
     Ownership is the authorisation: you may remove what you created, and
-    nothing else. Shared demo rows belong to no workspace, so they are
-    permanently read-only -- which is what keeps a first-time visitor's
-    dashboard from being emptied by a passer-by.
+    nothing else.
     """
     record = get_by_reference_or_id(db, identifier, owner_key=owner_key)
-    if record.is_demo or record.owner_key is None or record.owner_key != owner_key:
+    if record.owner_key is None or record.owner_key != owner_key:
         raise NotFoundError(f"No analysis found for '{identifier}'.")
     db.execute(delete(Analysis).where(Analysis.id == record.id))
     db.commit()
+
+
+# --------------------------------------------------------------------------
+# Retention
+# --------------------------------------------------------------------------
+def purge_workspace(db: Session, owner_key: str | None) -> int:
+    """Delete every analysis belonging to one workspace. Returns the count.
+
+    This is what the browser calls as it closes, and it is deliberately
+    incapable of doing anything else: the WHERE clause is the caller's own key,
+    so presenting someone else's key deletes their rows and presenting none
+    deletes nothing. There is no "purge all" variant to be reached by accident.
+    """
+    if not owner_key:
+        return 0
+    result = db.execute(delete(Analysis).where(Analysis.owner_key == owner_key))
+    db.commit()
+    return int(result.rowcount or 0)
+
+
+def purge_expired(db: Session) -> int:
+    """Delete analyses older than the retention window. Returns the count.
+
+    The backstop for sessions that never said goodbye. Demo rows are exempt so
+    a seeded local instance does not quietly empty itself overnight; they are
+    invisible to every workspace anyway.
+    """
+    if settings.analysis_retention_hours <= 0:
+        return 0
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.analysis_retention_hours)
+    result = db.execute(
+        delete(Analysis).where(Analysis.created_at < cutoff, Analysis.is_demo.is_(False))
+    )
+    db.commit()
+    return int(result.rowcount or 0)
+
+
+# Monotonic, per-process. Serverless resets it on every cold start, which only
+# means a fresh instance sweeps once on its first write -- harmless, and it
+# keeps the mechanism free of a scheduler this project does not otherwise need.
+_last_sweep_at: float | None = None
+
+
+def maybe_purge_expired(db: Session) -> None:
+    """Run the retention sweep if this process has not run one recently.
+
+    Failure here must never fail the analysis that triggered it: the user's
+    submission succeeded, and housekeeping is not their problem. The next write
+    tries again.
+    """
+    global _last_sweep_at
+    now = time.monotonic()
+    if _last_sweep_at is not None and now - _last_sweep_at < settings.retention_sweep_interval_seconds:
+        return
+    _last_sweep_at = now
+    try:
+        removed = purge_expired(db)
+        if removed:
+            logger.info("Retention sweep removed %d expired analyses", removed)
+    except Exception:  # pragma: no cover - housekeeping must not break a request
+        db.rollback()
+        logger.warning("Retention sweep failed; will retry on a later request", exc_info=True)

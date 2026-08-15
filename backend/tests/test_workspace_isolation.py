@@ -120,9 +120,15 @@ class TestDeletionRequiresOwnership:
         assert client.delete(f"/api/analyses/{alice_analysis['reference']}").status_code == 404
 
 
-class TestSharedDemoData:
-    """Seeded rows belong to no workspace and are visible to everyone, so a
-    first-time visitor sees a populated dashboard rather than an empty one."""
+class TestNothingIsSharedAtAll:
+    """Seeded demo rows used to be visible to everybody, so a first-time visitor
+    found a populated dashboard.
+
+    They are not any more. A visitor cannot tell a shared row from a leak of
+    someone else's history, and being unable to tell those apart is worse than
+    an empty first screen — a real user reported the shared rows as a privacy
+    bug, which is the strongest evidence the old default was wrong.
+    """
 
     @pytest.fixture
     def demo_row(self, client):
@@ -153,19 +159,167 @@ class TestSharedDemoData:
         finally:
             db.close()
 
-    def test_demo_rows_are_visible_to_every_workspace(self, client, demo_row):
+    def test_demo_rows_are_hidden_from_every_workspace(self, client, demo_row):
         for caller in (as_alice, as_bob):
             refs = [i["reference"] for i in caller(client, "GET", "/api/analyses").json()["items"]]
-            assert demo_row in refs
+            assert demo_row not in refs
 
-    def test_demo_rows_are_visible_without_any_key(self, client, demo_row):
+    def test_demo_rows_are_hidden_from_a_keyless_caller(self, client, demo_row):
         refs = [i["reference"] for i in client.get("/api/analyses").json()["items"]]
-        assert demo_row in refs
+        assert demo_row not in refs
 
-    def test_demo_rows_cannot_be_deleted(self, client, demo_row):
-        """Nobody owns them, so nobody may empty a new visitor's dashboard."""
-        assert as_alice(client, "DELETE", f"/api/analyses/{demo_row}").status_code == 404
-        assert client.get(f"/api/analyses/{demo_row}").status_code == 200
+    def test_demo_rows_cannot_be_opened_by_reference(self, client, demo_row):
+        assert as_alice(client, "GET", f"/api/analyses/{demo_row}").status_code == 404
+        assert client.get(f"/api/analyses/{demo_row}").status_code == 404
+
+    def test_a_brand_new_visitor_sees_an_empty_history(self, client, demo_row):
+        """The whole point: arriving for the first time shows you nothing."""
+        body = client.get("/api/analyses", headers={HEADER: "n" * 32}).json()
+        assert body["total"] == 0
+        assert body["items"] == []
+
+    def test_a_brand_new_visitors_dashboard_is_empty(self, client, demo_row):
+        stats = client.get("/api/stats/dashboard", headers={HEADER: "n" * 32}).json()
+        assert stats["total_analyses"] == 0
+        assert stats["recent"] == []
+
+
+class TestWorkspacePurge:
+    """`POST /api/analyses/purge` is what the browser calls as the tab closes."""
+
+    def test_purge_removes_only_the_callers_rows(self, client, alice_analysis):
+        bob = as_bob(client, "POST", "/api/analyze/url", json={"url": "https://bob.example/keep"})
+        assert bob.status_code == 201
+
+        purged = as_alice(client, "POST", "/api/analyses/purge")
+        assert purged.status_code == 200
+        assert purged.json()["deleted"] >= 1
+
+        # Alice is empty; Bob is untouched.
+        assert as_alice(client, "GET", "/api/analyses").json()["total"] == 0
+        bob_refs = [i["reference"] for i in as_bob(client, "GET", "/api/analyses").json()["items"]]
+        assert bob.json()["reference"] in bob_refs
+
+    def test_purged_reports_are_gone_not_merely_hidden(self, client, alice_analysis):
+        """Hiding would leave rows nobody holds a key to. Assert deletion."""
+        from app.database import SessionLocal
+        from app.models.analysis import Analysis
+
+        as_alice(client, "POST", "/api/analyses/purge")
+        db = SessionLocal()
+        try:
+            row = db.query(Analysis).filter_by(reference=alice_analysis["reference"]).one_or_none()
+            assert row is None
+        finally:
+            db.close()
+
+    def test_purge_without_a_key_deletes_nothing(self, client, alice_analysis):
+        assert client.post("/api/analyses/purge").json()["deleted"] == 0
+        assert as_alice(client, "GET", f"/api/analyses/{alice_analysis['reference']}").status_code == 200
+
+    def test_purge_with_a_malformed_key_deletes_nothing(self, client, alice_analysis):
+        response = client.post("/api/analyses/purge", headers={HEADER: "too-short"})
+        assert response.json()["deleted"] == 0
+        assert as_alice(client, "GET", f"/api/analyses/{alice_analysis['reference']}").status_code == 200
+
+
+class TestRetentionSweep:
+    """The backstop for sessions whose unload handler never fired."""
+
+    def _age_row(self, reference: str, hours: int) -> None:
+        from datetime import datetime, timedelta, timezone
+
+        from app.database import SessionLocal
+        from app.models.analysis import Analysis
+
+        db = SessionLocal()
+        try:
+            row = db.query(Analysis).filter_by(reference=reference).one()
+            row.created_at = datetime.now(timezone.utc) - timedelta(hours=hours)
+            db.commit()
+        finally:
+            db.close()
+
+    def test_expired_rows_are_deleted(self, client, alice_analysis):
+        from app.core.config import settings
+        from app.database import SessionLocal
+        from app.services import analysis_service
+
+        self._age_row(alice_analysis["reference"], settings.analysis_retention_hours + 1)
+        db = SessionLocal()
+        try:
+            assert analysis_service.purge_expired(db) == 1
+        finally:
+            db.close()
+        assert as_alice(client, "GET", f"/api/analyses/{alice_analysis['reference']}").status_code == 404
+
+    def test_rows_inside_the_window_survive(self, client, alice_analysis):
+        from app.database import SessionLocal
+        from app.services import analysis_service
+
+        db = SessionLocal()
+        try:
+            assert analysis_service.purge_expired(db) == 0
+        finally:
+            db.close()
+        assert as_alice(client, "GET", f"/api/analyses/{alice_analysis['reference']}").status_code == 200
+
+    def test_the_sweep_runs_on_write_traffic(self, client, monkeypatch):
+        """There is no scheduler here, so the sweep rides on writes. If that
+        call is ever dropped, expired rows accumulate silently forever."""
+        from app.services import analysis_service
+
+        calls: list[int] = []
+        monkeypatch.setattr(analysis_service, "_last_sweep_at", None)
+        monkeypatch.setattr(
+            analysis_service, "purge_expired", lambda db: calls.append(1) or 0
+        )
+
+        as_alice(client, "POST", "/api/analyze/url", json={"url": "https://example.com/sweep"})
+        assert calls, "a submission did not trigger the retention sweep"
+
+    def test_the_sweep_is_rate_limited_per_process(self, client, monkeypatch):
+        """Every write paying for a DELETE round-trip would be wasteful."""
+        from app.services import analysis_service
+
+        calls: list[int] = []
+        monkeypatch.setattr(analysis_service, "_last_sweep_at", None)
+        monkeypatch.setattr(
+            analysis_service, "purge_expired", lambda db: calls.append(1) or 0
+        )
+
+        for i in range(3):
+            as_alice(client, "POST", "/api/analyze/url", json={"url": f"https://example.com/s{i}"})
+        assert len(calls) == 1, f"swept {len(calls)} times across 3 writes"
+
+    def test_a_failing_sweep_does_not_fail_the_analysis(self, client, monkeypatch):
+        """The user's submission succeeded. Housekeeping is not their problem."""
+        from app.services import analysis_service
+
+        def boom(db):
+            raise RuntimeError("database went away mid-sweep")
+
+        monkeypatch.setattr(analysis_service, "_last_sweep_at", None)
+        monkeypatch.setattr(analysis_service, "purge_expired", boom)
+
+        response = as_alice(
+            client, "POST", "/api/analyze/url", json={"url": "https://example.com/resilient"}
+        )
+        assert response.status_code == 201
+
+    def test_a_zero_retention_setting_disables_the_sweep(self, client, alice_analysis, monkeypatch):
+        """0 must mean "keep", not "delete everything immediately"."""
+        from app.core.config import settings
+        from app.database import SessionLocal
+        from app.services import analysis_service
+
+        monkeypatch.setattr(settings, "analysis_retention_hours", 0)
+        self._age_row(alice_analysis["reference"], 10_000)
+        db = SessionLocal()
+        try:
+            assert analysis_service.purge_expired(db) == 0
+        finally:
+            db.close()
 
 
 class TestKeyValidation:

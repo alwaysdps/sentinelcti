@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import Select, case, func, select
+from sqlalchemy import Select, case, false, func, select
 from sqlalchemy.orm import Session
 
 from ..models.analysis import Analysis
@@ -38,18 +38,25 @@ class Page:
 
 
 def visible_to(owner_key: str | None):
-    """The single visibility rule: your own workspace, plus shared demo data.
+    """The single visibility rule: your own workspace, and nothing else.
 
     Every read goes through this. Keeping it in one expression -- rather than
     repeating `where(owner_key == ...)` at each call site -- is what stops a
     future query from silently exposing one workspace to another, which is the
     failure this whole feature exists to prevent.
+
+    Seeded demo rows used to be exempt so that a first-time visitor found a
+    populated dashboard. They are not exempt any more: shared rows are
+    indistinguishable, to the person looking at them, from a leak of somebody
+    else's history -- and being unable to tell those two apart is worse than an
+    empty first screen. A new visitor now starts empty, every time.
     """
     if owner_key is None:
-        # No workspace: shared demo data only. A client with storage disabled
-        # still gets a working tool, it just does not accumulate history.
-        return Analysis.is_demo.is_(True)
-    return (Analysis.owner_key == owner_key) | Analysis.is_demo.is_(True)
+        # No workspace -- storage disabled, or a malformed key. The tool still
+        # works; it simply does not remember, and shows nothing that predates
+        # this request.
+        return false()
+    return Analysis.owner_key == owner_key
 
 
 def _apply_filters(

@@ -96,13 +96,19 @@ const TOKEN_KEY = 'sentinelcti.access_token';
 /**
  * Anonymous workspace key.
  *
- * Generated once per browser and sent with every request, so each visitor sees
- * only their own analyses (plus the shared demo data) without ever creating an
- * account. See the backend's `core/owner.py` for the threat model.
+ * Generated per browsing session and sent with every request, so each visitor
+ * sees only their own analyses without ever creating an account. See the
+ * backend's `core/owner.py` for the threat model.
  *
- * localStorage, not sessionStorage: history should survive closing the tab,
- * which is the whole point. It does not survive clearing site data — an
- * accepted trade for having no login.
+ * sessionStorage, not localStorage: a history of what someone was investigating
+ * should not outlive the visit that produced it. The key dies when the tab
+ * closes, and `purgeWorkspaceOnExit` below asks the server to delete the rows
+ * it pointed at, so returning later means starting empty rather than finding
+ * yesterday's submissions waiting.
+ *
+ * Two consequences worth knowing, both inherent to per-session storage:
+ * sessionStorage is per *tab*, so a second tab is a second workspace; and a
+ * reload keeps the key, so refreshing does not lose your history mid-visit.
  *
  * 256 bits from the platform CSPRNG. Guessing another workspace has to be
  * infeasible, because holding the key *is* the claim to it.
@@ -115,29 +121,85 @@ function createWorkspaceKey(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export function getWorkspaceKey(): string {
+/**
+ * Remove the key left behind by the previous, persistent scheme.
+ *
+ * Anyone who used the site before history became session-scoped still has a
+ * workspace key in local storage. It is inert -- nothing reads it any more --
+ * but leaving it there would make the privacy policy's list of what this site
+ * stores in your browser wrong for exactly the people who had used it longest.
+ * The rows it pointed at are unreachable now and the server's retention sweep
+ * removes them.
+ */
+function dropLegacyPersistentKey(): void {
   try {
-    let key = localStorage.getItem(WORKSPACE_KEY);
+    localStorage.removeItem(WORKSPACE_KEY);
+  } catch {
+    /* storage unavailable — there is nothing to remove */
+  }
+}
+
+export function getWorkspaceKey(): string {
+  dropLegacyPersistentKey();
+  try {
+    let key = sessionStorage.getItem(WORKSPACE_KEY);
     if (!key || !/^[A-Za-z0-9_-]{32,64}$/.test(key)) {
       key = createWorkspaceKey();
-      localStorage.setItem(WORKSPACE_KEY, key);
+      sessionStorage.setItem(WORKSPACE_KEY, key);
     }
     return key;
   } catch {
     // Storage blocked (private mode, hardened settings). The app still works;
-    // the server treats a missing key as "no workspace", so the visitor sees
-    // the shared demo data and their submissions simply are not retained.
+    // the server treats a missing key as "no workspace", so submissions are
+    // simply not retained and the history stays empty.
     return '';
   }
 }
 
-/** Discards this browser's history by starting a fresh workspace. */
-export function resetWorkspace(): void {
+/**
+ * Delete this workspace's analyses, then take a fresh key.
+ *
+ * Erasure, not concealment: the rows go from the database. Awaiting the purge
+ * before rotating matters — rotate first and the old key is gone, taking with
+ * it the only handle anyone had on those rows.
+ */
+export async function clearWorkspace(): Promise<void> {
   try {
-    localStorage.setItem(WORKSPACE_KEY, createWorkspaceKey());
-  } catch {
-    /* storage unavailable — nothing was being retained anyway */
+    await request<{ deleted: number }>('/analyses/purge', { method: 'POST' });
+  } finally {
+    try {
+      sessionStorage.setItem(WORKSPACE_KEY, createWorkspaceKey());
+    } catch {
+      /* storage unavailable — nothing was being retained anyway */
+    }
   }
+}
+
+/**
+ * Ask the server to drop this session's rows as the tab goes away.
+ *
+ * `pagehide` rather than `beforeunload`: the latter is skipped when a page is
+ * restored from the back/forward cache, and on mobile it frequently never fires
+ * at all. `keepalive` lets the request outlive the document — an ordinary fetch
+ * is cancelled the moment the page is torn down.
+ *
+ * Best-effort by nature. A crashed tab, a killed browser or a dead network
+ * sends nothing, which is exactly why the server also expires rows on its own
+ * (`ANALYSIS_RETENTION_HOURS`) rather than trusting this to be the only path.
+ */
+export function purgeWorkspaceOnExit(): void {
+  window.addEventListener('pagehide', () => {
+    const workspace = getWorkspaceKey();
+    if (!workspace) return;
+    const headers: Record<string, string> = { 'X-Owner-Key': workspace };
+    const token = getAccessToken();
+    if (token) headers['X-Access-Token'] = token;
+    try {
+      void fetch(`${API_BASE}/analyses/purge`, { method: 'POST', headers, keepalive: true });
+    } catch {
+      /* nothing useful to do while the page is being destroyed */
+    }
+  });
 }
 
 export function setAccessToken(token: string): void {

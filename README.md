@@ -174,7 +174,7 @@ sentinelcti/
 | Charts | Recharts | Declarative, small, no imperative canvas code. |
 | Backend | Python 3.11+, FastAPI, Pydantic v2 | Validation at the boundary; OpenAPI docs generated from the same models. |
 | Database | SQLAlchemy 2.0 ORM, SQLite or PostgreSQL/[Supabase](#9-using-supabase-postgresql) | ORM-only access means parameterised queries everywhere and a backend switch that is one environment variable. |
-| Testing | pytest | 276 tests over analyzers, scoring, storage, hostile uploads, PostgreSQL portability and the API. |
+| Testing | pytest | 459 tests over analyzers, scoring, storage, hostile uploads, workspace isolation, retention, PostgreSQL portability and the API. |
 | Packaging | Docker + Compose, nginx | Single-origin deployment; no CORS grant required in production. |
 
 **Dependencies are deliberately few.** File type identification, string extraction, entropy, the public-suffix split, rate limiting and the async-state hooks are all implemented directly — each is short, and each is logic a reviewer of this project should be able to read.
@@ -262,6 +262,26 @@ This is stated in the API description, on every report page, and here. The score
 **Secrets.** Configuration comes from `.env` via `pydantic-settings`; nothing reads `os.environ` directly. `.env` is git-ignored, `.env.example` ships placeholders only, and `/api/config` reports *whether* a provider is configured but never what configures it.
 
 **Containers.** The backend runs as an unprivileged user (uid 10001) — it handles attacker-supplied files, so root is exactly the wrong default. The frontend ships as static assets on nginx; Node and the toolchain stay in the build stage. The backend port is published on loopback only, because the API has no authentication.
+
+### Session-scoped history
+
+Submissions to this tool are suspicious URLs, internal hostnames and files under investigation. Two properties follow from that, and neither is the default you get for free.
+
+**Nothing is shared.** The browser generates a 256-bit key per session and sends it as `X-Owner-Key`; every read is filtered by it through a single predicate, `query_service.visible_to`. A first-time visitor sees an empty history.
+
+Seeded `is_demo` rows used to be exempt, so a new dashboard was not blank. That exemption is gone. A visitor cannot distinguish a deliberately shared record from a leak of somebody else's history — and a user reported exactly that, as a privacy bug, which is the clearest evidence the old default was wrong. An empty first screen is the cheaper mistake.
+
+**Nothing outlives the visit.** The key lives in `sessionStorage`, so it dies with the tab, and the page asks the API to delete its rows on `pagehide` (`fetch` with `keepalive` — an ordinary fetch is cancelled when the document is torn down).
+
+An unload handler is best-effort: a crashed tab, a killed browser or a dead network sends nothing. So the server expires rows independently after `ANALYSIS_RETENTION_HOURS` (default 24), swept opportunistically on write traffic since serverless has no long-running process to schedule from. Without that backstop every abandoned session would leave rows nobody holds a key to — invisible to everyone, deletable by nobody, accumulating forever.
+
+The window runs from row creation, not last activity. A session open longer than it loses its earliest analyses; measuring from last use would mean tracking activity, which stores more about a visitor rather than less.
+
+| | |
+|---|---|
+| Purge on demand | `POST /api/analyses/purge` — deletes only rows matching the presented key. **POST, not DELETE**: deployments commonly gate `DELETE` behind `ACCESS_PROTECTED_METHODS`, and this operation needs no such gate, since the key you hold is the only thing it can act on. |
+| Retention backstop | `ANALYSIS_RETENTION_HOURS` (0 disables), swept at most every `RETENTION_SWEEP_INTERVAL_SECONDS` per process. |
+| Failure mode | A failed sweep is logged and retried on a later request. Housekeeping never fails the analysis that triggered it. |
 
 ## 8. Installation
 
@@ -407,7 +427,9 @@ Optionally populate the dashboard with synthetic demo data:
 cd backend && python -m scripts.seed --reset
 ```
 
-The seed script runs the **real** analysis pipeline over reserved, non-routable indicators (RFC 2606 `.example` names, RFC 5737 TEST-NET addresses, the public EICAR test hashes). It fabricates no scores — every seeded report is reproducible by submitting the same indicator through the UI. All seeded rows are flagged `is_demo` and rendered with a **DEMO** badge.
+The seed script runs the **real** analysis pipeline over reserved, non-routable indicators (RFC 2606 `.example` names, RFC 5737 TEST-NET addresses, the public EICAR test hashes). It fabricates no scores — every seeded report is reproducible by submitting the same indicator through the UI.
+
+> **Seeded rows are no longer visible in the UI.** They are flagged `is_demo` and belong to no workspace, and [session-scoped history](#session-scoped-history) shows a visitor only their own submissions. The script remains useful for exercising the pipeline and inspecting the database directly; it will not populate anyone's dashboard.
 
 > The EICAR test file is seeded as a *hash*, never written to disk: EICAR exists precisely so endpoint protection fires on it, and on a machine with real-time scanning the write is intercepted.
 
@@ -713,13 +735,14 @@ cd backend && python -m pytest
 ```
 
 ```
-276 passed
+459 passed
 ```
 
 Coverage by area:
 
 | Suite | What it asserts |
 |---|---|
+| `test_workspace_isolation.py` | One workspace never sees another's listing, report, dashboard counts or activity series, by reference or by numeric id; nothing at all is shared, so a new visitor's history and dashboard are empty; purge deletes only the caller's rows and genuinely removes them rather than hiding them; the retention sweep expires old rows and a zero setting disables it |
 | `test_hostile_uploads.py` | 16 adversarial payloads complete in bounded time; extraction scales linearly rather than quadratically; truncation is reported not hidden; control characters, ANSI escapes, bidi overrides and NUL bytes never reach output; indicators are defanged; sample bytes are removed even when analysis is cut short; the API still serves other requests afterwards |
 | `test_postgres_compat.py` | Every query compiles against the real PostgreSQL dialect; JSON becomes JSONB; `date_trunc` is used on Postgres and `date()` on SQLite; Supabase pooler detection, prepared-statement disabling and TLS enforcement; the connection password is never printed or exposed by the API |
 | `test_url_analyzer.py` | Valid/invalid URLs, scheme rejection, HTTPS, IP hosts, punycode, brand impersonation, encoding tricks, payload extensions, multi-label suffixes |
@@ -752,6 +775,7 @@ Interactive Swagger UI at **`/docs`**, ReDoc at **`/redoc`**, schema at **`/open
 | `GET` | `/api/analyses` | Paginated history with search, filter, sort |
 | `GET` | `/api/analyses/{id}` | Full report by numeric id **or** `SC-` reference |
 | `DELETE` | `/api/analyses/{id}` | Delete a stored analysis |
+| `POST` | `/api/analyses/purge` | Delete every analysis in the caller's workspace |
 
 ```bash
 curl -X POST http://localhost:8000/api/analyze/url \

@@ -170,8 +170,13 @@ const CLAUSES: Clause[] = [
           .
         </P>
         <P>
-          Uploaded file bytes are deleted after analysis. Text extracted from them is retained in the
-          report — see clause 4 of the privacy policy, which is the part most people do not expect.
+          Uploaded file bytes are deleted after analysis. Text extracted from them is retained for as
+          long as the report is — see clause 4 of the privacy policy, which is the part most people
+          do not expect.
+        </P>
+        <P>
+          Your history is <Term>deleted when you leave</Term>. It exists for the duration of a visit
+          and is not a records system; see clause 7 below and clause 8 of the privacy policy.
         </P>
       </>
     ),
@@ -187,9 +192,10 @@ const CLAUSES: Clause[] = [
           slow, unavailable, changed, or withdrawn entirely at any time and without notice.
         </P>
         <P>
-          Stored analyses may be deleted at any time, including during maintenance or a schema
-          change. <Term>Keep your own copy of anything you need.</Term> The service is not a records
-          system and must not be relied on as one.
+          Analyses are <Term>deleted when you leave the site</Term>, and in any case within the
+          service's retention window. They may also be removed at any time during maintenance or a
+          schema change. <Term>Keep your own copy of anything you need.</Term> The service is not a
+          records system and must not be relied on as one.
         </P>
       </>
     ),
@@ -344,8 +350,8 @@ export default function Terms() {
             anything.
           </Bullet>
           <Bullet>
-            No uptime commitment and no warranty. Stored analyses may be deleted at any time — keep
-            your own copies.
+            No uptime commitment and no warranty. Your history is deleted when you leave — keep your
+            own copies of anything you need.
           </Bullet>
           <Bullet>The source is MIT-licensed; these terms cover this hosted instance.</Bullet>
         </Bullets>

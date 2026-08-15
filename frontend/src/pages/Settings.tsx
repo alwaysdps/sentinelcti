@@ -18,7 +18,7 @@ import {
   VerdictBadge,
 } from '../components/ui';
 import { useFetch } from '../hooks/useAsync';
-import { api, resetWorkspace } from '../services/api';
+import { api, clearWorkspace } from '../services/api';
 import { formatBytes } from '../lib/format';
 import type { Verdict } from '../types/analysis';
 
@@ -40,41 +40,54 @@ function Toggle({ on, onLabel, offLabel }: { on: boolean; onLabel: string; offLa
  * Workspace control.
  *
  * The privacy policy tells people this exists, which is the reason it is here
- * rather than buried in the API client: a documented way to walk away from a
- * history has to be reachable without opening the developer console.
+ * rather than buried in the API client: a documented way to erase a history has
+ * to be reachable without opening the developer console.
  *
- * It is careful about what it claims. Resetting stops *this browser* seeing the
- * old analyses; it does not delete them, because the key that reached them is
- * the only handle anyone had. Saying otherwise would be the comfortable lie.
+ * It says "erase" because it now erases — the rows are deleted server-side
+ * before the key is rotated. An earlier version could only hide them, and said
+ * so; claiming erasure without performing it would have been the one wording
+ * here that actually mattered.
  */
 function WorkspaceCard() {
   const [confirming, setConfirming] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [failed, setFailed] = useState(false);
 
-  function handleReset() {
-    resetWorkspace();
+  async function handleClear() {
+    setClearing(true);
+    setFailed(false);
+    try {
+      await clearWorkspace();
+    } catch {
+      // The rows may still be there. Say so rather than navigating away and
+      // letting a fresh empty history imply a deletion that did not happen.
+      setFailed(true);
+      setClearing(false);
+      return;
+    }
     // A hard navigation, not a router push: the dashboard and history views
-    // hold data fetched under the previous key, and re-rendering them would
-    // keep showing analyses this browser can no longer reach.
+    // hold data fetched under the previous key.
     window.location.assign('/dashboard');
   }
 
   return (
     <Card
       title="Your data"
-      description="This browser's private view of its own analyses, and how to walk away from it."
+      description="What this session has stored, and how to get rid of it now."
     >
       <p className="text-sm leading-relaxed text-content-secondary">
-        There are no accounts here. Your browser holds a random key and sends it with each request,
-        which is how the console shows you your own submissions and not anyone else's. It identifies
-        a browser, not a person — the same person on a phone and a laptop has two workspaces.
+        There are no accounts here. Your browser generates a random key for this visit and sends it
+        with each request, which is how the console shows you your own submissions and nobody
+        else's. It identifies a browsing session, not a person.
       </p>
 
       <div className="mt-4">
-        <InlineNotice tone="warning">
-          Starting a new workspace <strong className="text-content-primary">hides</strong> your
-          history rather than erasing it. The records stay in the database, but the key that reached
-          them is gone, so afterwards nobody — including you — can list or delete them. To remove
-          data, delete each report first, then reset.
+        <InlineNotice>
+          Your history is <strong className="text-content-primary">deleted when you leave</strong>.
+          The key lives in session storage, so it goes when the tab closes, and the browser asks the
+          server to delete the analyses it pointed at. Anything that outlives that request — a
+          crashed tab, a dropped connection — is removed by the server's own retention sweep.
+          Reopening the site later starts you empty.
         </InlineNotice>
       </div>
 
@@ -82,18 +95,20 @@ function WorkspaceCard() {
         {confirming ? (
           <>
             <span className="text-sm text-content-secondary">
-              Start a new workspace and hide this browser's history?
+              Delete every analysis in this session?
             </span>
             <button
               type="button"
-              onClick={handleReset}
+              onClick={handleClear}
+              disabled={clearing}
               className="btn border border-verdict-critical/40 bg-verdict-critical/10 px-3 py-1.5 text-xs text-verdict-critical hover:bg-verdict-critical/20"
             >
-              Yes, start fresh
+              {clearing ? 'Deleting…' : 'Yes, delete it all'}
             </button>
             <button
               type="button"
               onClick={() => setConfirming(false)}
+              disabled={clearing}
               className="btn-ghost px-3 py-1.5 text-xs"
             >
               Cancel
@@ -105,10 +120,16 @@ function WorkspaceCard() {
             onClick={() => setConfirming(true)}
             className="btn-secondary px-4 py-2 text-xs"
           >
-            Start a new workspace
+            Clear my history now
           </button>
         )}
       </div>
+
+      {failed && (
+        <p role="alert" className="mt-3 text-sm text-verdict-critical">
+          Could not reach the server, so nothing was deleted. Try again.
+        </p>
+      )}
 
       <p className="mt-4 text-xs text-content-muted">
         What is stored, for how long, and how to remove it is set out in the{' '}

@@ -277,3 +277,9 @@ class PlatformConfig(BaseModel):
 class DeleteResponse(BaseModel):
     deleted: bool
     reference: str
+
+
+class PurgeResponse(BaseModel):
+    """Result of emptying the caller's own workspace."""
+
+    deleted: int

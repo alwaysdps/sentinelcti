@@ -95,6 +95,27 @@ class Settings(BaseSettings):
     # concurrent submissions -- it stops a burst from filling the disk.
     max_quarantine_bytes: int = Field(default=256 * 1024 * 1024)
 
+    # --- Retention ---------------------------------------------------------
+    # History is per-session and disposable: the browser holds its workspace key
+    # in session storage, and drops it when the tab closes. The client asks the
+    # API to delete its rows on the way out, but an unload handler is a
+    # best-effort thing -- a crashed tab, a killed process or a lost network
+    # never sends it.
+    #
+    # This is the backstop that makes "erased when you leave" true rather than
+    # aspirational. Without it every abandoned session would leave rows nobody
+    # holds a key to: undeletable by anyone, invisible to everyone, and growing
+    # forever.
+    #
+    # Measured from creation, not last use, so a session left open for longer
+    # than this loses its earliest analyses. That is the deliberate trade for
+    # not tracking per-workspace activity, which would mean storing more about
+    # a visitor rather than less.
+    analysis_retention_hours: int = Field(default=24)
+    # How often a warm process re-runs the sweep. Cheap (one indexed DELETE),
+    # but not worth paying on every single write.
+    retention_sweep_interval_seconds: int = Field(default=300)
+
     # --- Rate limiting -----------------------------------------------------
     rate_limit_enabled: bool = Field(default=True)
     rate_limit_requests: int = Field(default=60)
