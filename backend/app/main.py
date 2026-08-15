@@ -63,7 +63,25 @@ TAGS_METADATA = [
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     if settings.auto_create_tables:
-        init_db()
+        try:
+            init_db()
+        except Exception as exc:  # noqa: BLE001 - startup must never hard-fail
+            # An unreachable or unwritable database at startup used to raise
+            # here, and on serverless that kills EVERY invocation: the platform
+            # reports FUNCTION_INVOCATION_FAILED and no endpoint responds at
+            # all, including the health check that would have explained why.
+            #
+            # Degrading instead means /api/health still answers and names the
+            # problem, which is the difference between a five-minute fix and an
+            # opaque 500.
+            logger.error(
+                "Schema initialisation failed (%s: %s). The API will start, but "
+                "database-backed endpoints will report unavailable. Check "
+                "DATABASE_URL, and set AUTO_CREATE_TABLES=false once the schema "
+                "exists.",
+                type(exc).__name__,
+                exc,
+            )
 
     try:
         settings.upload_dir.mkdir(parents=True, exist_ok=True)

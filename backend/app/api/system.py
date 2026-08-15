@@ -41,10 +41,15 @@ def health(db: Session = Depends(get_db)) -> HealthResponse:
         stored = db.execute(select(func.count()).select_from(Analysis)).scalar_one()
         connected = True
         db_state = f"connected ({backend_name()})"
-    except Exception:  # noqa: BLE001 - report degradation instead of 500ing
+    except Exception as exc:  # noqa: BLE001 - report degradation instead of 500ing
         stored = -1
         connected = False
-        db_state = "unavailable"
+        # The exception *type* only: enough to tell a missing driver
+        # (ModuleNotFoundError) from a refused connection (OperationalError)
+        # from a missing table (ProgrammingError), which is the whole question
+        # when a deployment will not talk to its database. The message is
+        # omitted deliberately -- it can contain the connection string.
+        db_state = f"unavailable ({type(exc).__name__})"
 
     return HealthResponse(
         status="ok" if connected else "degraded",

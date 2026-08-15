@@ -130,6 +130,72 @@ class TestServerlessSettings:
         assert _engine_kwargs(url)["connect_args"]["prepare_threshold"] is None
 
 
+class TestStartupNeverHardFails:
+    """Regression: an unreachable database at startup killed every invocation.
+
+    On Vercel the symptom was `FUNCTION_INVOCATION_FAILED` on all routes --
+    including the health check that would have explained it. Startup must
+    degrade so the API can report its own problem.
+    """
+
+    def test_schema_failure_does_not_break_the_api(self, monkeypatch):
+        from fastapi.testclient import TestClient
+
+        from app import main
+        from app.core import config
+
+        def explode() -> None:
+            raise RuntimeError("database unreachable")
+
+        monkeypatch.setattr(config.settings, "auto_create_tables", True)
+        monkeypatch.setattr(main, "init_db", explode)
+
+        with TestClient(main.app) as client:
+            assert client.get("/api/health").status_code == 200
+            # Endpoints that never touch the database keep working entirely.
+            assert client.get("/api/config").status_code == 200
+
+    def test_health_reports_the_failure_type(self, monkeypatch):
+        """'unavailable' alone cannot distinguish a missing driver from a
+        refused connection from a missing table."""
+        from fastapi.testclient import TestClient
+
+        from app.api import system
+        from app.main import app
+
+        class Boom(Exception):
+            pass
+
+        def broken(*_args, **_kwargs):
+            raise Boom("nope")
+
+        monkeypatch.setattr(system, "select", broken)
+
+        with TestClient(app) as client:
+            body = client.get("/api/health").json()
+            assert body["status"] == "degraded"
+            assert "Boom" in body["database"]
+
+    def test_health_failure_never_leaks_the_connection_string(self, monkeypatch):
+        """The exception *message* can contain credentials; only the type is safe."""
+        from fastapi.testclient import TestClient
+
+        from app.api import system
+        from app.main import app
+
+        secret = "postgresql://user:hunter2@db.example.com:5432/postgres"
+
+        def broken(*_args, **_kwargs):
+            raise RuntimeError(f"could not connect to {secret}")
+
+        monkeypatch.setattr(system, "select", broken)
+
+        with TestClient(app) as client:
+            text = client.get("/api/health").text
+            assert "hunter2" not in text
+            assert secret not in text
+
+
 class TestReadOnlyFilesystem:
     def test_unwritable_upload_dir_does_not_break_startup(self, monkeypatch, tmp_path):
         """Vercel's filesystem is read-only outside /tmp. Failing startup would
