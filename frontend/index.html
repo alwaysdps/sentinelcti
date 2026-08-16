@@ -7,6 +7,37 @@
       name="description"
       content="SentinelCTI — a defensive cyber threat intelligence platform for safely triaging suspicious files, URLs and network indicators."
     />
+
+    <!--
+      Canonical host. This deployment is reachable on several *.vercel.app
+      names, all serving identical content; without this a search engine has to
+      guess which is the original and may pick a different one each time. The
+      real fix is deleting the duplicate projects — this only limits the damage
+      until then.
+
+      Change this and sitemap.xml together if a custom domain is added.
+    -->
+    <link rel="canonical" href="https://sentinelcti.vercel.app/" />
+
+    <!--
+      Google Search Console verification goes here, as a meta tag rather than
+      the uploaded HTML file: the SPA fallback rewrite answers unknown paths
+      with index.html, so /google<token>.html would return the app shell and
+      verification would fail with no obvious cause.
+
+      <meta name="google-site-verification" content="TOKEN_FROM_SEARCH_CONSOLE" />
+    -->
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="SentinelCTI" />
+    <meta property="og:url" content="https://sentinelcti.vercel.app/" />
+    <meta property="og:title" content="SentinelCTI — Threat Intelligence Platform" />
+    <meta
+      property="og:description"
+      content="Triage suspicious files, URLs, domains, IPs and hashes on infrastructure you control — with every point of the verdict explained."
+    />
+    <meta name="twitter:card" content="summary" />
+    <meta name="theme-color" content="#070b0a" />
     <link
       rel="icon"
       type="image/svg+xml"

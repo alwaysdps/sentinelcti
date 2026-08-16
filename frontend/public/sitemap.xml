@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Only the three publicly meaningful routes. The console is session-scoped and
+  renders empty without a workspace key, and report URLs are deleted when their
+  visitor leaves, so listing either would submit URLs that are empty on arrival
+  or gone by the next crawl.
+
+  Absolute URLs are required by the sitemap protocol, so the host is written
+  out. If a custom domain is added, this file and the canonical tag in
+  index.html are the two places that need changing.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://sentinelcti.vercel.app/</loc>
+    <lastmod>2026-08-15</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://sentinelcti.vercel.app/privacy</loc>
+    <lastmod>2026-08-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://sentinelcti.vercel.app/terms</loc>
+    <lastmod>2026-08-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+</urlset>

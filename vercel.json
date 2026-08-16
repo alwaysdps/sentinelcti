@@ -23,7 +23,7 @@
       "destination": "/api/index"
     },
     {
-      "source": "/((?!api/|assets/|_vercel/).*)",
+      "source": "/((?!api/|assets/|_vercel/|robots\\.txt|sitemap\\.xml).*)",
       "destination": "/index.html"
     }
   ],

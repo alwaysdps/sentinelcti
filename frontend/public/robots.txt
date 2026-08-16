@@ -1,0 +1,34 @@
+# SentinelCTI — crawler policy
+#
+# Only three routes are worth indexing. Everything else is either a
+# session-scoped console view that renders empty for a crawler, or an API.
+#
+# The console pages are disallowed rather than left open because a crawler
+# has no workspace key: it would index a dashboard reading "0 analyses" and a
+# history reading "nothing here yet", which describes the tool inaccurately to
+# anyone who found it that way.
+#
+# Report URLs are disallowed for a stronger reason. They are per-session and
+# deleted when their visitor leaves, so every one of them becomes a 404 within
+# a day of being crawled.
+
+User-agent: *
+
+Allow: /$
+Allow: /privacy
+Allow: /terms
+
+Disallow: /dashboard
+Disallow: /analyze
+Disallow: /history
+Disallow: /settings
+Disallow: /login
+Disallow: /analysis/
+
+# The API and its interactive documentation. Neither is a page.
+Disallow: /api/
+Disallow: /docs
+Disallow: /redoc
+Disallow: /openapi.json
+
+Sitemap: https://sentinelcti.vercel.app/sitemap.xml

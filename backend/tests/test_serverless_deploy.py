@@ -90,6 +90,43 @@ class TestVercelConfig:
         assert not pattern.fullmatch("_vercel/insights/script.js")
         assert not pattern.fullmatch("_vercel/insights/view")
 
+    def test_spa_fallback_excludes_the_crawler_files(self, config):
+        """Served as index.html these are not merely wrong, they are wrong in a
+        way that looks fine: robots.txt returns 200 with an HTML body, and a
+        sitemap returns HTML where XML was promised. Search Console reports a
+        parse failure and the cause is nowhere near the symptom."""
+        import re
+
+        fallback = next(r for r in config["rewrites"] if r["destination"] == "/index.html")
+        pattern = re.compile(fallback["source"].lstrip("/"))
+        assert not pattern.fullmatch("robots.txt")
+        assert not pattern.fullmatch("sitemap.xml")
+        # The escaping must not turn the dot into a wildcard and start
+        # swallowing real client-side routes.
+        assert pattern.fullmatch("robotsXtxt")
+
+    def test_crawler_files_exist_and_agree_with_each_other(self):
+        """A sitemap listing a route that robots.txt disallows is a
+        contradiction Search Console reports rather than resolves."""
+        import re
+
+        public = VERCEL_CONFIG.parent / "frontend" / "public"
+        robots = (public / "robots.txt").read_text(encoding="utf-8")
+        sitemap = (public / "sitemap.xml").read_text(encoding="utf-8")
+
+        assert "Sitemap: https://sentinelcti.vercel.app/sitemap.xml" in robots
+
+        disallowed = [
+            line.split(":", 1)[1].strip()
+            for line in robots.splitlines()
+            if line.startswith("Disallow:")
+        ]
+        listed = re.findall(r"<loc>https://sentinelcti\.vercel\.app(/[^<]*)</loc>", sitemap)
+        assert listed, "sitemap lists no URLs"
+        for path in listed:
+            for rule in disallowed:
+                assert not path.startswith(rule), f"sitemap lists {path}, which robots.txt blocks"
+
     def test_csp_permits_the_first_party_analytics_script(self, config):
         """The privacy policy's no-consent-banner reasoning rests on analytics
         being same-origin and cookieless. A CSP that forced a third-party host
